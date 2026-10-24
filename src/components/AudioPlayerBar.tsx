@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
-import { getStoredAudioUrl } from '../utils/audioStorage';
 
 interface AudioPlayerBarProps {
   theme: ThemeConfig;
@@ -26,7 +25,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>('');
 
   // Volume state
   const [volume, setVolume] = useState<number>(() => {
@@ -46,35 +44,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // Resolve activeSongUrl asynchronously (handles IndexedDB track IDs, data URLs, direct links)
-  useEffect(() => {
-    let isMounted = true;
-    async function resolveSrc() {
-      if (!activeSongUrl || !activeSongUrl.trim()) {
-        if (isMounted) setResolvedAudioSrc('');
-        return;
-      }
-      try {
-        const resolved = await getStoredAudioUrl(activeSongUrl);
-        if (isMounted) {
-          setResolvedAudioSrc(resolved || activeSongUrl || '');
-        }
-      } catch {
-        if (isMounted) setResolvedAudioSrc(activeSongUrl || '');
-      }
-    }
-    resolveSrc();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeSongUrl]);
-
-  // When resolved track source changes, update audio element with Android compatibility
+  // Directly assign activeSongUrl from Firestore server
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (!resolvedAudioSrc) {
+    if (!activeSongUrl || !activeSongUrl.trim()) {
       audio.removeAttribute('src');
       audio.load();
       setIsPlaying(false);
@@ -83,19 +58,19 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       return;
     }
 
-    // Assign source and load media on Android
-    audio.src = resolvedAudioSrc;
+    // Set src directly from Firestore data
+    audio.src = activeSongUrl;
     audio.load();
     setCurrentTime(0);
 
-    // Mobile Android Chrome handling: wait for canplay before auto-resuming playback
+    // Mobile Android Chrome handling: auto-resume playback if active
     if (isPlaying) {
       const handleCanPlay = () => {
         audio
           .play()
           .then(() => setIsPlaying(true))
           .catch((err) => {
-            console.warn('Android playback error on track change:', err);
+            console.warn('Playback error on active song change:', err);
             setIsPlaying(false);
           });
       };
@@ -105,7 +80,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         audio.removeEventListener('canplay', handleCanPlay);
       };
     }
-  }, [resolvedAudioSrc]);
+  }, [activeSongUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -136,11 +111,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     if (audio?.error) {
       console.warn('Audio media error encountered:', audio.error);
       setIsPlaying(false);
-      if (activeSongUrl?.startsWith('track_')) {
-        showToast('Local PC track not stored on Android. Use Stream Presets in Admin 🎵');
-      } else {
-        showToast('Audio stream error on this device');
-      }
+      showToast('Audio stream error. Check audio URL in Admin');
     }
   };
 
@@ -149,16 +120,15 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
-    // Check if track was an un-synced local track ID from another device
-    if (!resolvedAudioSrc || (activeSongUrl?.startsWith('track_') && !resolvedAudioSrc.startsWith('blob:') && !resolvedAudioSrc.startsWith('data:'))) {
-      showToast('Track saved locally on PC. Pick a Stream Preset for Android 🎵');
+    if (!activeSongUrl || !activeSongUrl.trim()) {
+      showToast('No audio loaded in database. Add a track in Admin 🎵');
       if (onOpenUpload) onOpenUpload();
       return;
     }
 
-    // Ensure audio element source matches current resolved source
-    if (audio.src !== resolvedAudioSrc) {
-      audio.src = resolvedAudioSrc;
+    // Ensure audio element source matches current active song URL
+    if (audio.src !== activeSongUrl) {
+      audio.src = activeSongUrl;
       audio.load();
     }
 
@@ -175,10 +145,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         setIsPlaying(true);
         showToast(`Playing ${activeSongTitle || 'Track'} 🎵`);
       } catch (err: any) {
-        console.warn('Android play failed:', err);
+        console.warn('Playback failed:', err);
         setIsPlaying(false);
         if (err?.name === 'NotAllowedError') {
-          showToast('Tap play again to enable audio on Android 🎵');
+          showToast('Tap play again to enable audio 🎵');
         } else {
           showToast(`Tap play again to start ${activeSongTitle || 'track'}`);
         }
@@ -254,7 +224,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     return <Volume2 className="w-4 h-4 text-purple-300" />;
   };
 
-  const displayTitle = activeSongTitle || (resolvedAudioSrc ? 'Playing Song' : 'No Track Selected');
+  const displayTitle = activeSongTitle || (activeSongUrl ? 'Playing Song' : 'No Track Selected');
   const displayArtist = activeSongArtist;
 
   return (
@@ -267,7 +237,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       {/* Hidden audio element with playsInline for Android & iOS mobile devices */}
       <audio
         ref={audioRef}
-        src={resolvedAudioSrc || undefined}
+        src={activeSongUrl || undefined}
         loop
         playsInline
         preload="auto"

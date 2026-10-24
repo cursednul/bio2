@@ -316,25 +316,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       if (selectedFile) {
         sourceType = 'upload';
         duration = await calculateAudioDuration(selectedFile);
-        const trackId = `track_${Date.now()}`;
-        // Store in IndexedDB
-        finalAudioUrl = await storeAudioBlob(trackId, selectedFile, cleanTitle, cleanArtist);
-        
-        // If file size is under 750KB, convert to Data URL for instant cross-device playback
-        if (selectedFile.size <= 750 * 1024) {
-          try {
-            const dataUrl = await fileToDataUrl(selectedFile);
-            firestoreAudioUrl = dataUrl;
-            finalAudioUrl = dataUrl;
-          } catch {
-            firestoreAudioUrl = trackId;
-          }
-        } else {
-          firestoreAudioUrl = trackId;
+
+        // Check if file exceeds Firestore's 1MB document limit (~800KB max for Base64 payload)
+        if (selectedFile.size > 800 * 1024) {
+          showToast('File exceeds 800KB Firestore server limit. Use a stream URL or smaller MP3!');
+          setIsUploadingTrack(false);
+          return;
+        }
+
+        try {
+          const dataUrl = await fileToDataUrl(selectedFile);
+          firestoreAudioUrl = dataUrl;
+          finalAudioUrl = dataUrl;
+        } catch {
+          showToast('Failed to read MP3 file');
+          setIsUploadingTrack(false);
+          return;
         }
       }
 
-      // Add to Firestore tracks collection
+      // Add to Firestore tracks collection on server
       await addDoc(collection(db, 'tracks'), {
         title: cleanTitle.slice(0, 100),
         artist: cleanArtist.slice(0, 100),
@@ -344,8 +345,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         createdAt: new Date().toISOString(),
       });
 
-      // Update active song locally and in Firestore global settings
-      onSetActiveSong(cleanTitle, cleanArtist, finalAudioUrl);
+      // Update active song in Firestore global settings for all visitors/devices
+      onSetActiveSong(cleanTitle, cleanArtist, firestoreAudioUrl);
       onSetFavSong(cleanTitle);
 
       await saveGlobalSettingsToFirestore({
@@ -374,8 +375,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const handleActivateTrack = async (track: AudioTrack) => {
     sound.playClick();
-    const resolvedUrl = (await getStoredAudioUrl(track.audioUrl)) || track.audioUrl;
-    onSetActiveSong(track.title, track.artist, resolvedUrl);
+    onSetActiveSong(track.title, track.artist, track.audioUrl);
     onSetFavSong(track.title);
 
     await saveGlobalSettingsToFirestore({
