@@ -28,6 +28,7 @@ export interface CommentReply {
   author: string;
   message: string;
   timestamp: string;
+  isAdmin?: boolean;
   createdAt?: string;
 }
 
@@ -37,6 +38,7 @@ export interface CommentEntry {
   message: string;
   timestamp: string;
   pinned?: boolean;
+  isAdmin?: boolean;
   replies?: CommentReply[];
 }
 

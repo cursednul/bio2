@@ -8,11 +8,12 @@ service cloud.firestore {
 
     function isValidComment(data) {
       return data.keys().hasAll(['author', 'message', 'timestamp', 'pinned']) &&
-             data.keys().hasOnly(['author', 'message', 'timestamp', 'pinned', 'createdAt', 'replies']) &&
+             data.keys().hasOnly(['author', 'message', 'timestamp', 'pinned', 'createdAt', 'replies', 'isAdmin']) &&
              data.author is string && data.author.size() <= 32 &&
              data.message is string && data.message.size() > 0 && data.message.size() <= 300 &&
              data.timestamp is string && data.timestamp.size() <= 64 &&
              data.pinned is bool &&
+             (!('isAdmin' in data) || data.isAdmin is bool) &&
              (!('replies' in data) || data.replies is list);
     }
 

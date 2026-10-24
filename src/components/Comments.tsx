@@ -55,7 +55,13 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
             message: (data.message as string) || '',
             timestamp: (data.timestamp as string) || '',
             pinned: Boolean(data.pinned),
-            replies: Array.isArray(data.replies) ? (data.replies as CommentReply[]) : [],
+            isAdmin: Boolean(data.isAdmin),
+            replies: Array.isArray(data.replies)
+              ? (data.replies as CommentReply[]).map((r) => ({
+                  ...r,
+                  isAdmin: Boolean(r.isAdmin),
+                }))
+              : [],
             createdAt: (data.createdAt as string) || '',
           });
         });
@@ -76,6 +82,7 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
                         message: c.message,
                         timestamp: c.timestamp || 'Recent',
                         pinned: false,
+                        isAdmin: Boolean(c.isAdmin),
                         replies: [],
                         createdAt: new Date().toISOString(),
                       });
@@ -132,10 +139,11 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
     const dateFormatted = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
     const newCommentData = {
-      author: author.trim() || 'anonymous',
+      author: author.trim() || (isAdmin ? 'cursed' : 'anonymous'),
       message: message.trim(),
       timestamp: `${dateFormatted}, ${timeFormatted}`,
       pinned: false,
+      isAdmin: isAdmin,
       replies: [],
       createdAt: now.toISOString(),
     };
@@ -165,9 +173,10 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
 
     const newReply: CommentReply = {
       id: `reply_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      author: replyAuthor.trim() || (isAdmin ? 'Admin' : 'anonymous'),
+      author: replyAuthor.trim() || (isAdmin ? 'cursed' : 'anonymous'),
       message: replyMessage.trim(),
       timestamp: `${dateFormatted}, ${timeFormatted}`,
+      isAdmin: isAdmin,
       createdAt: now.toISOString(),
     };
 
@@ -342,8 +351,14 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
                     <span className="font-semibold text-xs text-zinc-200 truncate">
                       {comment.author}
                     </span>
+                    {comment.isAdmin && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-purple-500/30 text-purple-300 border border-purple-400/30 flex items-center gap-0.5 shrink-0 shadow-sm">
+                        <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>ADMIN</span>
+                      </span>
+                    )}
                     {comment.pinned && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-purple-500/30 text-purple-300 border border-purple-400/30 flex items-center gap-0.5">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-purple-500/30 text-purple-300 border border-purple-400/30 flex items-center gap-0.5 shrink-0">
                         <Pin className="w-2.5 h-2.5" />
                         <span>PINNED</span>
                       </span>
@@ -423,6 +438,12 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
                           <div className="flex items-center gap-1.5">
                             <CornerDownRight className="w-3 h-3 text-purple-400 shrink-0" />
                             <span className="font-semibold text-purple-300">{r.author}</span>
+                            {r.isAdmin && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-purple-500/30 text-purple-300 border border-purple-400/30 flex items-center gap-0.5 shrink-0 shadow-sm">
+                                <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
+                                <span>ADMIN</span>
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1.5 text-zinc-500 text-[10px] font-mono">
