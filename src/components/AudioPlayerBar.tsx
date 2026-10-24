@@ -9,7 +9,7 @@ interface AudioPlayerBarProps {
   showToast: (msg: string) => void;
 }
 
-const AUDIO_SRC = '/assets/aistudio/Gigi_D_agostino_-_L_amour_Toujours__Tanzen_Vision_Rmx__6f45e248.mp3';
+const AUDIO_SRC = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/assets/aistudio/Gigi_D_agostino_-_L_amour_Toujours__Tanzen_Vision_Rmx__6f45e248.mp3`;
 
 export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
