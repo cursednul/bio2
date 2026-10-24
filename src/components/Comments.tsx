@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, MessageSquare, Trash2, ShieldCheck, Pin, PinOff, Globe, Loader2 } from 'lucide-react';
+import { Send, MessageSquare, Trash2, ShieldCheck, Pin, PinOff, Loader2 } from 'lucide-react';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { CommentEntry, ThemeConfig } from '../types';
@@ -171,21 +171,6 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
 
   return (
     <div className="w-full max-w-xl mx-auto mt-6 px-1 sm:px-0">
-      {/* Real-time sync badge */}
-      <div className="mb-3 flex items-center justify-between px-2 text-[11px] text-zinc-400">
-        <div className="flex items-center gap-1.5">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span className="flex items-center gap-1 font-mono text-zinc-400">
-            <Globe className="w-3 h-3 text-purple-400" /> Live Global Comments
-          </span>
-        </div>
-        <span className="font-mono text-[10px] text-zinc-500">
-          {entries.length} {entries.length === 1 ? 'comment' : 'comments'}
-        </span>
-      </div>
 
       {/* Admin Mode Status Banner */}
       {isAdmin && (
