@@ -89,17 +89,33 @@ export async function getStoredAudioUrl(idOrUrl: string): Promise<string | null>
 
 export async function calculateAudioDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
+    let resolved = false;
     const tempUrl = URL.createObjectURL(file);
     const audio = new Audio();
+
+    const finish = (duration: number) => {
+      if (resolved) return;
+      resolved = true;
+      try {
+        URL.revokeObjectURL(tempUrl);
+      } catch {
+        // Ignore
+      }
+      resolve(duration);
+    };
+
+    // Safety timeout in case browser delays audio metadata loading
+    const timer = setTimeout(() => finish(0), 1500);
+
     audio.preload = 'metadata';
     audio.src = tempUrl;
     audio.onloadedmetadata = () => {
-      URL.revokeObjectURL(tempUrl);
-      resolve(Math.round(audio.duration) || 0);
+      clearTimeout(timer);
+      finish(Math.round(audio.duration) || 0);
     };
     audio.onerror = () => {
-      URL.revokeObjectURL(tempUrl);
-      resolve(0);
+      clearTimeout(timer);
+      finish(0);
     };
   });
 }
