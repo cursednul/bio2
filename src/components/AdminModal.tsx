@@ -36,7 +36,8 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { SocialsViewMode, AudioTrack, GlobalSettingsDoc } from '../types';
 import { sound } from '../utils/audio';
 import { storeAudioBlob, calculateAudioDuration, getStoredAudioUrl, fileToDataUrl } from '../utils/audioStorage';
@@ -316,21 +317,19 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       if (selectedFile) {
         sourceType = 'upload';
         duration = await calculateAudioDuration(selectedFile);
-
-        // Check if file exceeds Firestore's 1MB document limit (~750KB max for Base64 payload)
-        if (selectedFile.size > 750 * 1024) {
-          showToast('File too large (>750KB). Use a smaller MP3 or a stream URL!');
-          setIsUploadingTrack(false);
-          return;
-        }
+        const trackId = `track_${Date.now()}`;
+        const storageRef = ref(storage, `tracks/${trackId}`);
 
         try {
-          // Convert to Data URL for server-side storage (Firestore)
-          const dataUrl = await fileToDataUrl(selectedFile);
-          firestoreAudioUrl = dataUrl;
-          finalAudioUrl = dataUrl;
-        } catch {
-          showToast('Failed to process MP3 file');
+          // Upload to Firebase Storage
+          await uploadBytes(storageRef, selectedFile);
+          // Get public download URL
+          const downloadUrl = await getDownloadURL(storageRef);
+          firestoreAudioUrl = downloadUrl;
+          finalAudioUrl = downloadUrl;
+        } catch (err) {
+          console.error('Storage upload error:', err);
+          showToast('Failed to upload audio to server');
           setIsUploadingTrack(false);
           return;
         }
@@ -346,7 +345,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         createdAt: new Date().toISOString(),
       });
 
-      // Update active song with direct Data URL (works on all devices)
+      // Update active song with direct Firebase Storage URL
       onSetActiveSong(cleanTitle, cleanArtist, finalAudioUrl);
       onSetFavSong(cleanTitle);
 
