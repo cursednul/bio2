@@ -87,11 +87,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         .catch((err) => {
           console.warn('Playback error on track change:', err);
           setIsPlaying(false);
-          // If custom track failed, fallback to default
-          if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
-            setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
-            showToast('Unable to stream custom track. Playing default 🎵');
-          }
         });
     }
   }, [resolvedAudioSrc]);
@@ -121,9 +116,17 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   }, [volume, isMuted]);
 
   const handleAudioError = () => {
-    if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
-      setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
-      showToast('Track URL unreachable. Default track loaded 🎵');
+    const audio = audioRef.current;
+    if (
+      audio?.error &&
+      (audio.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
+        audio.error.code === MediaError.MEDIA_ERR_NETWORK)
+    ) {
+      if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
+        console.warn('Fatal audio media error encountered:', audio.error);
+        setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+        showToast('Track URL unreachable. Default track loaded 🎵');
+      }
     }
   };
 
@@ -144,22 +147,32 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         await audio.play();
         setIsPlaying(true);
         showToast(`Playing ${activeSongTitle} 🎵`);
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Playback failed:', err);
-        // Attempt fallback to default audio track if custom track fails
-        if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
-          setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
-          showToast('Custom MP3 link unreachable. Playing default song 🎵');
-          try {
-            audio.src = DEFAULT_AUDIO_SRC;
-            audio.load();
-            await audio.play();
-            setIsPlaying(true);
-          } catch {
-            setIsPlaying(false);
+        setIsPlaying(false);
+
+        const mediaError = audio.error;
+        if (
+          mediaError &&
+          (mediaError.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
+            mediaError.code === MediaError.MEDIA_ERR_NETWORK)
+        ) {
+          if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
+            setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+            showToast('Unable to stream track. Playing default track 🎵');
+            try {
+              audio.src = DEFAULT_AUDIO_SRC;
+              audio.load();
+              await audio.play();
+              setIsPlaying(true);
+            } catch {
+              setIsPlaying(false);
+            }
           }
+        } else if (err?.name === 'NotAllowedError') {
+          showToast('Tap play to start audio 🎵');
         } else {
-          showToast('Click play again to start audio');
+          showToast(`Tap play again to start ${activeSongTitle}`);
         }
       }
     }
@@ -233,6 +246,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     return <Volume2 className="w-4 h-4 text-purple-300" />;
   };
 
+  const isUnresolvedLocalTrack = Boolean(activeSongUrl?.startsWith('track_') && resolvedAudioSrc === DEFAULT_AUDIO_SRC);
+  const displayTitle = isUnresolvedLocalTrack ? "L'amour Toujours" : activeSongTitle;
+  const displayArtist = isUnresolvedLocalTrack ? "Gigi D'Agostino" : activeSongArtist;
+
   return (
     <div
       style={{
@@ -262,12 +279,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       <div className="flex-1 min-w-0 pr-0.5">
         <div className="flex items-center justify-between gap-1 mb-1">
           <div className="flex items-center gap-1.5 truncate">
-            <span className="font-semibold text-zinc-100 text-xs truncate max-w-[130px] sm:max-w-[200px]" title={activeSongTitle}>
-              {activeSongTitle}
+            <span className="font-semibold text-zinc-100 text-xs truncate max-w-[130px] sm:max-w-[200px]" title={displayTitle}>
+              {displayTitle}
             </span>
-            {activeSongArtist && (
+            {displayArtist && (
               <span className="text-[10px] text-zinc-400 truncate hidden sm:inline">
-                · {activeSongArtist}
+                · {displayArtist}
               </span>
             )}
             {isPlaying && !isMuted && volume > 0 && (

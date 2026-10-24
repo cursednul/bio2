@@ -641,11 +641,58 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </label>
                     </div>
 
-                    {/* Or URL input */}
+                    {/* Quick Preset Selector */}
+                    <div>
+                      <label className="text-[11px] font-mono text-zinc-400 block mb-1.5">
+                        Quick Stream Presets (Streams to All Devices)
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                        {[
+                          {
+                            title: "L'amour Toujours",
+                            artist: "Gigi D'Agostino",
+                            url: `${import.meta.env.BASE_URL.replace(/\/$/, '')}/assets/aistudio/Gigi_D_agostino_-_L_amour_Toujours__Tanzen_Vision_Rmx__6f45e248.mp3`,
+                          },
+                          {
+                            title: 'Cyberpunk Synthwave',
+                            artist: 'Nightrunner',
+                            url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=cyberpunk-2099-10701.mp3',
+                          },
+                          {
+                            title: 'Lofi Study Beats',
+                            artist: 'Chillhop',
+                            url: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lofi-study-112191.mp3',
+                          },
+                          {
+                            title: 'Phonk Drift',
+                            artist: 'Phantom Beats',
+                            url: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a70512.mp3?filename=phonk-drift-110389.mp3',
+                          },
+                        ].map((preset) => (
+                          <button
+                            key={preset.title}
+                            type="button"
+                            onClick={() => {
+                              sound.playClick();
+                              setUploadSongTitle(preset.title);
+                              setUploadSongArtist(preset.artist);
+                              setUploadSongUrl(preset.url);
+                              setSelectedFile(null);
+                            }}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-600/30 border border-white/10 hover:border-purple-400 text-left text-zinc-300 hover:text-white transition-all cursor-pointer truncate"
+                          >
+                            <span className="font-semibold block truncate">{preset.title}</span>
+                            <span className="text-[9px] text-zinc-500 block truncate">{preset.artist}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Direct Stream URL input */}
                     <div>
                       <label className="text-[11px] font-mono text-zinc-400 block mb-1 flex items-center gap-1">
                         <Link className="w-3.5 h-3.5 text-purple-300" />
-                        <span>Or Direct MP3 Stream URL</span>
+                        <span>Direct Stream URL (Recommended for All Devices)</span>
                       </label>
                       <input
                         type="url"
