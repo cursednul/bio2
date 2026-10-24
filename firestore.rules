@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['author', 'message', 'timestamp', 'pinned']) &&
+             data.keys().hasOnly(['author', 'message', 'timestamp', 'pinned', 'createdAt']) &&
+             data.author is string && data.author.size() <= 32 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 300 &&
+             data.timestamp is string && data.timestamp.size() <= 64 &&
+             data.pinned is bool;
+    }
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection testing
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Public Comments visible to all users
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isValidId(commentId) &&
+                       isValidComment(request.resource.data) &&
+                       request.resource.data.pinned == false;
+      allow update: if isValidId(commentId) &&
+                       isValidComment(request.resource.data) &&
+                       request.resource.data.author == resource.data.author &&
+                       request.resource.data.message == resource.data.message &&
+                       request.resource.data.timestamp == resource.data.timestamp;
+      allow delete: if isValidId(commentId);
+    }
+  }
+}

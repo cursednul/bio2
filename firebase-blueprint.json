@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "Comment": {
+      "title": "Comment",
+      "description": "Public guest comment displayed on the website for all visitors",
+      "type": "object",
+      "properties": {
+        "author": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Name or handle of the author"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Content of the comment"
+        },
+        "timestamp": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Formatted date and time string"
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "Whether the comment is pinned by admin"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["author", "message", "timestamp", "pinned"]
+    }
+  },
+  "firestore": {
+    "/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Collection of guest comments visible to all users"
+    }
+  }
+}
