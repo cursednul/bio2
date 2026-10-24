@@ -316,14 +316,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       if (selectedFile) {
         sourceType = 'upload';
         duration = await calculateAudioDuration(selectedFile);
-
-        // Check if file exceeds Firestore's 1MB document limit (~800KB max for Base64 payload)
-        if (selectedFile.size > 800 * 1024) {
-          showToast('File exceeds 800KB Firestore server limit. Use a stream URL or smaller MP3!');
-          setIsUploadingTrack(false);
-          return;
-        }
-
         try {
           const dataUrl = await fileToDataUrl(selectedFile);
           firestoreAudioUrl = dataUrl;
@@ -641,52 +633,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </label>
                     </div>
 
-                    {/* Quick Preset Selector */}
-                    <div>
-                      <label className="text-[11px] font-mono text-zinc-400 block mb-1.5">
-                        Quick Stream Presets (Streams to All Devices)
-                      </label>
-                      <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
-                        {[
-                          {
-                            title: 'Cyberpunk Synthwave',
-                            artist: 'Nightrunner',
-                            url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=cyberpunk-2099-10701.mp3',
-                          },
-                          {
-                            title: 'Lofi Study Beats',
-                            artist: 'Chillhop',
-                            url: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lofi-study-112191.mp3',
-                          },
-                          {
-                            title: 'Phonk Drift',
-                            artist: 'Phantom Beats',
-                            url: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a70512.mp3?filename=phonk-drift-110389.mp3',
-                          },
-                          {
-                            title: 'Ambient Chill Out',
-                            artist: 'Solaris',
-                            url: 'https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f131a4.mp3?filename=ambient-124464.mp3',
-                          },
-                        ].map((preset) => (
-                          <button
-                            key={preset.title}
-                            type="button"
-                            onClick={() => {
-                              sound.playClick();
-                              setUploadSongTitle(preset.title);
-                              setUploadSongArtist(preset.artist);
-                              setUploadSongUrl(preset.url);
-                              setSelectedFile(null);
-                            }}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-600/30 border border-white/10 hover:border-purple-400 text-left text-zinc-300 hover:text-white transition-all cursor-pointer truncate"
-                          >
-                            <span className="font-semibold block truncate">{preset.title}</span>
-                            <span className="text-[9px] text-zinc-500 block truncate">{preset.artist}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+
 
                     {/* Direct Stream URL input */}
                     <div>
