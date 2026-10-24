@@ -31,11 +31,50 @@ export interface CommentEntry {
   pinned?: boolean;
 }
 
-export interface AdminSettings {
-  socialsViewMode: 'cards' | 'dock';
+export type SocialsViewMode = 'cards' | 'dock' | 'grid';
+
+export interface GlobalSettingsDoc {
+  socialsViewMode: SocialsViewMode;
   favGame: string;
   favSong: string;
   announcement: string;
   announcementActive: boolean;
   motionPreset: 'flow' | 'hyper' | 'calm';
+  bioEmoticon?: string;
+  nickname?: string;
+  avatarUrl?: string;
+  activeSongTitle?: string;
+  activeSongArtist?: string;
+  activeSongUrl?: string;
+  updatedAt?: string;
+}
+
+export interface AudioTrack {
+  id: string;
+  title: string;
+  artist: string;
+  audioUrl: string;
+  sourceType: 'url' | 'upload' | 'preset';
+  duration?: number;
+  createdAt?: string;
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  playerName: string;
+  score: number;
+  gameTitle: string;
+  createdAt?: string;
+}
+
+export interface AdminSettings {
+  socialsViewMode: SocialsViewMode;
+  favGame: string;
+  favSong: string;
+  announcement: string;
+  announcementActive: boolean;
+  motionPreset: 'flow' | 'hyper' | 'calm';
+  bioEmoticon?: string;
+  nickname?: string;
+  avatarUrl?: string;
 }

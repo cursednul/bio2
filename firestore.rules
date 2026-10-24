@@ -15,6 +15,41 @@ service cloud.firestore {
              data.pinned is bool;
     }
 
+    function isValidGlobalSettings(data) {
+      return data.keys().hasAll(['socialsViewMode', 'favGame', 'favSong', 'announcement', 'announcementActive', 'motionPreset']) &&
+             data.keys().hasOnly(['socialsViewMode', 'favGame', 'favSong', 'announcement', 'announcementActive', 'motionPreset', 'bioEmoticon', 'nickname', 'avatarUrl', 'activeSongTitle', 'activeSongArtist', 'activeSongUrl', 'updatedAt']) &&
+             data.socialsViewMode in ['cards', 'dock', 'grid'] &&
+             data.favGame is string && data.favGame.size() <= 64 &&
+             data.favSong is string && data.favSong.size() <= 64 &&
+             data.announcement is string && data.announcement.size() <= 200 &&
+             data.announcementActive is bool &&
+             data.motionPreset in ['flow', 'hyper', 'calm'] &&
+             (!('bioEmoticon' in data) || (data.bioEmoticon is string && data.bioEmoticon.size() <= 32)) &&
+             (!('nickname' in data) || (data.nickname is string && data.nickname.size() <= 32)) &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512)) &&
+             (!('activeSongTitle' in data) || (data.activeSongTitle is string && data.activeSongTitle.size() <= 100)) &&
+             (!('activeSongArtist' in data) || (data.activeSongArtist is string && data.activeSongArtist.size() <= 100)) &&
+             (!('activeSongUrl' in data) || (data.activeSongUrl is string && data.activeSongUrl.size() <= 1000));
+    }
+
+    function isValidTrack(data) {
+      return data.keys().hasAll(['title', 'artist', 'audioUrl', 'sourceType']) &&
+             data.keys().hasOnly(['title', 'artist', 'audioUrl', 'sourceType', 'duration', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.artist is string && data.artist.size() <= 100 &&
+             data.audioUrl is string && data.audioUrl.size() > 0 && data.audioUrl.size() <= 1000 &&
+             data.sourceType in ['url', 'upload', 'preset'] &&
+             (!('duration' in data) || data.duration is number);
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.keys().hasAll(['playerName', 'score', 'gameTitle']) &&
+             data.keys().hasOnly(['playerName', 'score', 'gameTitle', 'createdAt']) &&
+             data.playerName is string && data.playerName.size() > 0 && data.playerName.size() <= 32 &&
+             data.score is number && data.score >= 0 && data.score <= 1000000 &&
+             data.gameTitle is string && data.gameTitle.size() <= 64;
+    }
+
     // Default deny all
     match /{document=**} {
       allow read, write: if false;
@@ -32,11 +67,32 @@ service cloud.firestore {
                        isValidComment(request.resource.data) &&
                        request.resource.data.pinned == false;
       allow update: if isValidId(commentId) &&
-                       isValidComment(request.resource.data) &&
-                       request.resource.data.author == resource.data.author &&
-                       request.resource.data.message == resource.data.message &&
-                       request.resource.data.timestamp == resource.data.timestamp;
+                       isValidComment(request.resource.data);
       allow delete: if isValidId(commentId);
+    }
+
+    // Global settings (socials view style, game, song, banner, profile customization)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create: if isValidId(settingId) && isValidGlobalSettings(request.resource.data);
+      allow update: if isValidId(settingId) && isValidGlobalSettings(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Audio tracks (custom uploaded MP3s, URLs, titles)
+    match /tracks/{trackId} {
+      allow read: if true;
+      allow create: if isValidId(trackId) && isValidTrack(request.resource.data);
+      allow update: if isValidId(trackId) && isValidTrack(request.resource.data);
+      allow delete: if isValidId(trackId);
+    }
+
+    // Game leaderboard & high scores
+    match /leaderboard/{scoreId} {
+      allow read: if true;
+      allow create: if isValidId(scoreId) && isValidLeaderboardEntry(request.resource.data);
+      allow update: if false;
+      allow delete: if isValidId(scoreId);
     }
   }
 }

@@ -106,7 +106,7 @@ class SoundEngine {
     }
   }
 
-  public playPop() {
+  public playPop(pitchMultiplier: number = 1.0) {
     if (this.isMuted) return;
     const ctx = this.getContext();
     if (!ctx) return;
@@ -116,8 +116,8 @@ class SoundEngine {
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(320, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.08);
+      osc.frequency.setValueAtTime(320 * pitchMultiplier, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60 * pitchMultiplier, ctx.currentTime + 0.08);
 
       gain.gain.setValueAtTime(0.06, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);

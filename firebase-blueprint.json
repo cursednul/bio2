@@ -31,12 +31,160 @@
         }
       },
       "required": ["author", "message", "timestamp", "pinned"]
+    },
+    "GlobalSettings": {
+      "title": "GlobalSettings",
+      "description": "Live customizable profile and site configuration saved to database for all visitors",
+      "type": "object",
+      "properties": {
+        "socialsViewMode": {
+          "type": "string",
+          "enum": ["cards", "dock", "grid"],
+          "description": "View mode for social links"
+        },
+        "favGame": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Favorite game displayed on profile"
+        },
+        "favSong": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Favorite song displayed on profile"
+        },
+        "announcement": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Live broadcast announcement message"
+        },
+        "announcementActive": {
+          "type": "boolean",
+          "description": "Whether the announcement banner is actively showing"
+        },
+        "motionPreset": {
+          "type": "string",
+          "enum": ["flow", "hyper", "calm"],
+          "description": "Kinetic background motion speed preset"
+        },
+        "bioEmoticon": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Profile mood emoticon or tag"
+        },
+        "nickname": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Profile display nickname"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Custom avatar image URL"
+        },
+        "activeSongTitle": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Currently active song title"
+        },
+        "activeSongArtist": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Currently active song artist"
+        },
+        "activeSongUrl": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Active audio stream URL or asset path"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["socialsViewMode", "favGame", "favSong", "announcement", "announcementActive", "motionPreset"]
+    },
+    "Track": {
+      "title": "Track",
+      "description": "Audio song entry with custom title, artist and URL/audio source",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Title of the song"
+        },
+        "artist": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Artist or creator name"
+        },
+        "audioUrl": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Direct audio URL or identifier"
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": ["url", "upload", "preset"],
+          "description": "Source origin of the audio"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Audio duration in seconds"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Upload timestamp"
+        }
+      },
+      "required": ["title", "artist", "audioUrl", "sourceType"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Global mini-game high score entry saved to database",
+      "type": "object",
+      "properties": {
+        "playerName": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Player handle or nickname"
+        },
+        "score": {
+          "type": "number",
+          "description": "Achieved game score"
+        },
+        "gameTitle": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Game mode or title"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Score submission timestamp"
+        }
+      },
+      "required": ["playerName", "score", "gameTitle"]
     }
   },
   "firestore": {
     "/comments/{commentId}": {
       "schema": "Comment",
       "description": "Collection of guest comments visible to all users"
+    },
+    "/settings/{settingId}": {
+      "schema": "GlobalSettings",
+      "description": "Global profile, audio, and view style settings synchronized across all visitors"
+    },
+    "/tracks/{trackId}": {
+      "schema": "Track",
+      "description": "Catalog of audio songs with custom MP3s and titles"
+    },
+    "/leaderboard/{scoreId}": {
+      "schema": "LeaderboardEntry",
+      "description": "Global leaderboard entries for the interactive mini-game"
     }
   }
 }

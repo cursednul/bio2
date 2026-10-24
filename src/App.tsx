@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Layers, MessageSquare, ShieldCheck, Megaphone } from 'lucide-react';
+import { Layers, MessageSquare, ShieldCheck, Megaphone, Gamepad2, Plus } from 'lucide-react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from './firebase';
 import { BackgroundCanvas } from './components/BackgroundCanvas';
 import { ProfileCard } from './components/ProfileCard';
 import { SocialLinks } from './components/SocialLinks';
@@ -8,7 +10,7 @@ import { Comments } from './components/Comments';
 import { AudioPlayerBar } from './components/AudioPlayerBar';
 import { AdminModal } from './components/AdminModal';
 import { Toast } from './components/Toast';
-import { ThemeConfig } from './types';
+import { ThemeConfig, SocialsViewMode, GlobalSettingsDoc } from './types';
 import { sound } from './utils/audio';
 
 // Signature Phantom Lavender Theme
@@ -34,7 +36,7 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Admin authentication state
+  // Admin session authentication state
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem('cursed_admin_auth') === 'true';
@@ -43,67 +45,90 @@ export default function App() {
     }
   });
 
-  // Global Socials View Mode (Controlled only by Admin, applies to all visitors)
-  const [socialsViewMode, setSocialsViewMode] = useState<'cards' | 'dock'>(() => {
+  // Global Socials View Mode - Live synced with Firestore
+  const [socialsViewMode, setSocialsViewMode] = useState<SocialsViewMode>(() => {
     try {
-      const saved = localStorage.getItem('cursed_socials_view_mode');
-      if (saved === 'dock' || saved === 'cards') return saved;
+      const saved = localStorage.getItem('cursed_socials_view_mode') as SocialsViewMode;
+      if (saved === 'dock' || saved === 'cards' || saved === 'grid') return saved;
     } catch {
       // Ignore
     }
     return 'cards';
   });
 
-  // Live Customizable Favorite Game & Song (Configured by Admin)
-  const [favGame, setFavGame] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('cursed_fav_game');
-      if (saved) return saved;
-    } catch {
-      // Ignore
-    }
-    return 'Watch Dogs 2';
-  });
+  // Live Customizable Favorite Game & Song
+  const [favGame, setFavGame] = useState<string>('Watch Dogs 2');
+  const [favSong, setFavSong] = useState<string>("L'amour Toujours");
 
-  const [favSong, setFavSong] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('cursed_fav_song');
-      if (saved) return saved;
-    } catch {
-      // Ignore
-    }
-    return "L'amour Toujours";
-  });
+  // Live Audio Player Song Details
+  const [activeSongTitle, setActiveSongTitle] = useState<string>("L'amour Toujours");
+  const [activeSongArtist, setActiveSongArtist] = useState<string>("Gigi D'Agostino");
+  const [activeSongUrl, setActiveSongUrl] = useState<string>('');
 
-  // Live Broadcast Announcement Banner (Configured by Admin)
-  const [announcement, setAnnouncement] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('cursed_announcement');
-      if (saved) return saved;
-    } catch {
-      // Ignore
-    }
-    return 'Welcome to cursed · Connect on Telegram, TikTok & Discord';
-  });
+  // Profile Customization
+  const [nickname, setNickname] = useState<string>('cursed');
+  const [bioEmoticon, setBioEmoticon] = useState<string>('(˶>⩊<˶)');
+  const [avatarUrl, setAvatarUrl] = useState<string>('');
 
-  const [announcementActive, setAnnouncementActive] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('cursed_announcement_active') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Live Broadcast Announcement Banner
+  const [announcement, setAnnouncement] = useState<string>(
+    'Welcome to cursed · Connect on Telegram, TikTok & Discord'
+  );
+  const [announcementActive, setAnnouncementActive] = useState<boolean>(false);
 
   // Background Motion Engine Preset
-  const [motionPreset, setMotionPreset] = useState<'flow' | 'hyper' | 'calm'>(() => {
-    try {
-      const saved = localStorage.getItem('cursed_motion_preset');
-      if (saved === 'calm' || saved === 'hyper' || saved === 'flow') return saved;
-    } catch {
-      // Ignore
-    }
-    return 'flow';
-  });
+  const [motionPreset, setMotionPreset] = useState<'flow' | 'hyper' | 'calm'>('flow');
+
+  // Real-time synchronization of Global Settings from Firestore (Database Persistence)
+  useEffect(() => {
+    const settingsRef = doc(db, 'settings', 'global');
+    const unsubscribe = onSnapshot(
+      settingsRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as Partial<GlobalSettingsDoc>;
+          if (data.socialsViewMode) setSocialsViewMode(data.socialsViewMode);
+          if (data.favGame) setFavGame(data.favGame);
+          if (data.favSong) setFavSong(data.favSong);
+          if (data.announcement !== undefined) setAnnouncement(data.announcement);
+          if (data.announcementActive !== undefined) setAnnouncementActive(data.announcementActive);
+          if (data.motionPreset) setMotionPreset(data.motionPreset);
+          if (data.nickname) setNickname(data.nickname);
+          if (data.bioEmoticon) setBioEmoticon(data.bioEmoticon);
+          if (data.avatarUrl !== undefined) setAvatarUrl(data.avatarUrl);
+          if (data.activeSongTitle) setActiveSongTitle(data.activeSongTitle);
+          if (data.activeSongArtist) setActiveSongArtist(data.activeSongArtist);
+          if (data.activeSongUrl !== undefined) setActiveSongUrl(data.activeSongUrl);
+        } else {
+          // Initialize default document in Firestore if not present yet
+          setDoc(
+            settingsRef,
+            {
+              socialsViewMode: 'cards',
+              favGame: 'Watch Dogs 2',
+              favSong: "L'amour Toujours",
+              announcement: 'Welcome to cursed · Connect on Telegram, TikTok & Discord',
+              announcementActive: false,
+              motionPreset: 'flow',
+              nickname: 'cursed',
+              bioEmoticon: '(˶>⩊<˶)',
+              avatarUrl: '',
+              activeSongTitle: "L'amour Toujours",
+              activeSongArtist: "Gigi D'Agostino",
+              activeSongUrl: '',
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch((e) => handleFirestoreError(e, OperationType.CREATE, 'settings/global'));
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'settings/global');
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   const motionScale = motionPreset === 'calm' ? 0.4 : motionPreset === 'hyper' ? 1.6 : 1.0;
 
@@ -156,60 +181,34 @@ export default function App() {
     }
   };
 
-  const handleUpdateSocialsViewMode = (mode: 'cards' | 'dock') => {
+  // Immediate database sync for Socials View Mode
+  const handleUpdateSocialsViewMode = async (mode: SocialsViewMode) => {
     setSocialsViewMode(mode);
     try {
       localStorage.setItem('cursed_socials_view_mode', mode);
-    } catch {
-      // Ignore
+      await setDoc(
+        doc(db, 'settings', 'global'),
+        {
+          socialsViewMode: mode,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      showToast(`Socials view style updated to ${mode.toUpperCase()}! ✨`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'settings/global');
     }
   };
 
-  const handleUpdateFavGame = (game: string) => {
-    setFavGame(game);
-    try {
-      localStorage.setItem('cursed_fav_game', game);
-    } catch {
-      // Ignore
-    }
-  };
-
-  const handleUpdateFavSong = (song: string) => {
-    setFavSong(song);
-    try {
-      localStorage.setItem('cursed_fav_song', song);
-    } catch {
-      // Ignore
-    }
-  };
-
-  const handleUpdateAnnouncement = (msg: string, active: boolean) => {
-    setAnnouncement(msg);
-    setAnnouncementActive(active);
-    try {
-      localStorage.setItem('cursed_announcement', msg);
-      localStorage.setItem('cursed_announcement_active', active ? 'true' : 'false');
-    } catch {
-      // Ignore
-    }
-  };
-
-  const handleUpdateMotionPreset = (preset: 'flow' | 'hyper' | 'calm') => {
-    setMotionPreset(preset);
-    try {
-      localStorage.setItem('cursed_motion_preset', preset);
-    } catch {
-      // Ignore
-    }
+  const handleSetActiveSong = (title: string, artist: string, url: string) => {
+    setActiveSongTitle(title);
+    setActiveSongArtist(artist);
+    setActiveSongUrl(url);
+    setFavSong(title);
   };
 
   const [commentResetKey, setCommentResetKey] = useState(0);
   const handleClearAllComments = () => {
-    try {
-      localStorage.removeItem('cursed_saved_comments');
-    } catch {
-      // Ignore
-    }
     setCommentResetKey((k) => k + 1);
   };
 
@@ -239,8 +238,8 @@ export default function App() {
   const handleShare = async () => {
     sound.playClick();
     const shareData = {
-      title: 'cursed — Profile',
-      text: 'Explore cursed on Telegram, TikTok, Instagram, Discord & Steam',
+      title: `${nickname} — Profile`,
+      text: `Explore ${nickname} on Telegram, TikTok, Instagram, Discord & Steam`,
       url: window.location.href,
     };
     if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
@@ -286,8 +285,8 @@ export default function App() {
       )}
 
       {/* Top Bar */}
-      <header className="relative z-30 w-full max-w-5xl mx-auto px-3.5 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-4 sm:gap-6 border-b border-white/5">
-        {/* Zone 1: Single text element wordmark with 10-click secret trigger */}
+      <header className="relative z-30 w-full max-w-5xl mx-auto px-3.5 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-3 sm:gap-6 border-b border-white/5">
+        {/* Zone 1: Wordmark with 10-click secret trigger */}
         <div className="flex items-center gap-2 shrink-0">
           <a
             href="/"
@@ -306,7 +305,7 @@ export default function App() {
             >
               ✦
             </span>
-            <span>cursed</span>
+            <span>{nickname}</span>
           </a>
 
           {isAdmin && (
@@ -321,7 +320,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Zone 2: Navigation Links (Clean 2 Tabs) */}
+        {/* Zone 2: Navigation Links (Clean 3 Tabs) */}
         <nav className="flex items-center gap-1 p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
@@ -332,7 +331,7 @@ export default function App() {
                   sound.playClick();
                   setActiveTab(tab.id);
                 }}
-                className={`relative px-4 py-2 min-h-[40px] rounded-xl text-xs font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors cursor-pointer touch-manipulation ${
+                className={`relative px-3 sm:px-4 py-2 min-h-[40px] rounded-xl text-xs font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors cursor-pointer touch-manipulation ${
                   isActive ? 'text-white' : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -360,11 +359,11 @@ export default function App() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 text-xs font-medium transition-all cursor-pointer shadow-md"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Admin Suite</span>
+              <span className="hidden sm:inline">Admin Suite</span>
             </button>
           ) : (
             <div className="text-[11px] font-mono text-zinc-500 select-none hidden sm:block">
-              (˶&gt;⩊&lt;˶)
+              {bioEmoticon}
             </div>
           )}
         </div>
@@ -378,7 +377,10 @@ export default function App() {
           onShare={handleShare}
           showToast={showToast}
           favGame={favGame}
-          favSong={favSong}
+          favSong={activeSongTitle || favSong}
+          nickname={nickname}
+          bioEmoticon={bioEmoticon}
+          avatarUrl={avatarUrl}
         />
 
         {/* Dynamic Tab Body */}
@@ -422,8 +424,15 @@ export default function App() {
         </div>
       </main>
 
-      {/* Floating Audio Synthesizer Bar with Volume Changer */}
-      <AudioPlayerBar theme={theme} showToast={showToast} />
+      {/* Floating Audio Synthesizer Bar with Volume & Dynamic Track Support */}
+      <AudioPlayerBar
+        theme={theme}
+        showToast={showToast}
+        activeSongTitle={activeSongTitle}
+        activeSongArtist={activeSongArtist}
+        activeSongUrl={activeSongUrl}
+        onOpenUpload={() => setIsAdminModalOpen(true)}
+      />
 
       {/* Secret Admin Control Suite */}
       <AdminModal
@@ -435,14 +444,27 @@ export default function App() {
         socialsViewMode={socialsViewMode}
         onSetSocialsViewMode={handleUpdateSocialsViewMode}
         favGame={favGame}
-        onSetFavGame={handleUpdateFavGame}
+        onSetFavGame={setFavGame}
         favSong={favSong}
-        onSetFavSong={handleUpdateFavSong}
+        onSetFavSong={setFavSong}
         announcement={announcement}
         announcementActive={announcementActive}
-        onSetAnnouncement={handleUpdateAnnouncement}
+        onSetAnnouncement={(msg, active) => {
+          setAnnouncement(msg);
+          setAnnouncementActive(active);
+        }}
         motionPreset={motionPreset}
-        onSetMotionPreset={handleUpdateMotionPreset}
+        onSetMotionPreset={setMotionPreset}
+        nickname={nickname}
+        onSetNickname={setNickname}
+        bioEmoticon={bioEmoticon}
+        onSetBioEmoticon={setBioEmoticon}
+        avatarUrl={avatarUrl}
+        onSetAvatarUrl={setAvatarUrl}
+        activeSongTitle={activeSongTitle}
+        activeSongArtist={activeSongArtist}
+        activeSongUrl={activeSongUrl}
+        onSetActiveSong={handleSetActiveSong}
         onClearAllComments={handleClearAllComments}
         commentCount={0}
         onExportComments={handleExportComments}

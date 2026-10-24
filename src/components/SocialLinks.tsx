@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ExternalLink, Copy, Check, LayoutGrid, Rows } from 'lucide-react';
-import { SocialLink, ThemeConfig } from '../types';
+import { ExternalLink, Copy, Check, LayoutGrid, Rows, Grid3X3 } from 'lucide-react';
+import { SocialLink, ThemeConfig, SocialsViewMode } from '../types';
 import { sound } from '../utils/audio';
 
 interface SocialLinksProps {
   theme: ThemeConfig;
-  viewMode: 'cards' | 'dock';
+  viewMode: SocialsViewMode;
   isAdmin: boolean;
-  onSetViewMode: (mode: 'cards' | 'dock') => void;
+  onSetViewMode: (mode: SocialsViewMode) => void;
   showToast: (msg: string) => void;
 }
 
@@ -142,54 +142,65 @@ export const SocialLinks: React.FC<SocialLinksProps> = ({
       <div className="flex items-center justify-between mb-3 px-2">
         <div className="text-xs font-mono uppercase tracking-wider text-zinc-400 font-semibold flex items-center gap-2">
           <span>SOCIALS</span>
-          {isAdmin && (
-            <span className="text-[10px] text-purple-400 font-normal">
-              (Admin Control)
-            </span>
-          )}
         </div>
 
-        {/* View Switcher only accessible to Admin - Min 44px touch targets */}
+        {/* 3-Mode View Switcher accessible to Admin & Saved to Database */}
         {isAdmin && (
           <div className="flex items-center gap-1 p-1 rounded-xl bg-purple-950/40 border border-purple-500/30 text-xs">
             <button
               onClick={() => {
                 sound.playClick();
                 onSetViewMode('cards');
-                showToast('Socials set to Cards View for all visitors');
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] rounded-lg transition-all cursor-pointer ${
+              title="Cards View"
+              className={`flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] rounded-lg transition-all cursor-pointer ${
                 viewMode === 'cards'
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
               <Rows className="w-3.5 h-3.5" />
-              <span>Cards</span>
+              <span className="hidden sm:inline">Cards</span>
+            </button>
+
+            <button
+              onClick={() => {
+                sound.playClick();
+                onSetViewMode('grid');
+              }}
+              title="Grid View"
+              className={`flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] rounded-lg transition-all cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Grid3X3 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Grid</span>
             </button>
 
             <button
               onClick={() => {
                 sound.playClick();
                 onSetViewMode('dock');
-                showToast('Socials set to Dock View for all visitors');
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] rounded-lg transition-all cursor-pointer ${
+              title="Dock View"
+              className={`flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] rounded-lg transition-all cursor-pointer ${
                 viewMode === 'dock'
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Dock</span>
+              <span className="hidden sm:inline">Dock</span>
             </button>
           </div>
         )}
       </div>
 
       <AnimatePresence mode="wait">
-        {viewMode === 'cards' ? (
-          /* Cards View - Touch Ergonomics with distinct touch targets */
+        {viewMode === 'cards' && (
+          /* Cards View - Full Width Rich Rows */
           <motion.div
             key="cards"
             initial={{ opacity: 0, y: 10 }}
@@ -215,13 +226,11 @@ export const SocialLinks: React.FC<SocialLinksProps> = ({
                   onMouseLeave={() => setHoveredLink(null)}
                   className="group relative flex items-center justify-between p-3.5 sm:p-3 rounded-2xl bg-white/[0.04] active:bg-white/[0.09] hover:bg-white/[0.08] border border-white/10 hover:border-purple-500/40 backdrop-blur-md transition-all shadow-sm overflow-hidden touch-manipulation min-h-[58px]"
                 >
-                  {/* Subtle Colored Accent Ribbon on hover */}
                   <div
                     className="absolute left-0 top-0 bottom-0 w-1 opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ background: link.color }}
                   />
 
-                  {/* Left: Icon + Title + Handle */}
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div
                       className="w-11 h-11 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:rotate-[-6deg] group-hover:scale-108 shadow-sm"
@@ -244,9 +253,7 @@ export const SocialLinks: React.FC<SocialLinksProps> = ({
                     </div>
                   </div>
 
-                  {/* Right: Actions with 44px tap target separation */}
                   <div className="flex items-center gap-2 shrink-0 ml-2">
-                    {/* Copy Button - Min 44px touch target on mobile */}
                     <button
                       onClick={(e) => handleCopy(e, link)}
                       title={`Copy ${link.title} handle`}
@@ -259,7 +266,6 @@ export const SocialLinks: React.FC<SocialLinksProps> = ({
                       )}
                     </button>
 
-                    {/* Open link arrow - Min 44px touch target */}
                     <div className="p-2.5 sm:p-2 min-w-[42px] min-h-[42px] rounded-xl bg-white/5 group-hover:bg-purple-600/30 text-zinc-400 group-hover:text-purple-300 border border-white/5 transition-all flex items-center justify-center">
                       <ExternalLink className="w-4 h-4" />
                     </div>
@@ -268,7 +274,74 @@ export const SocialLinks: React.FC<SocialLinksProps> = ({
               );
             })}
           </motion.div>
-        ) : (
+        )}
+
+        {viewMode === 'grid' && (
+          /* Grid View - Sleek 2-Column Responsive Cards */
+          <motion.div
+            key="grid"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="grid grid-cols-2 gap-2.5 sm:gap-3"
+          >
+            {SOCIAL_LINKS.map((link, index) => {
+              const isCopied = copiedId === link.id;
+              return (
+                <motion.a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.03, duration: 0.2 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="group relative flex flex-col justify-between p-3.5 sm:p-4 rounded-2xl bg-white/[0.04] active:bg-white/[0.08] hover:bg-white/[0.07] border border-white/10 hover:border-purple-400/40 backdrop-blur-md transition-all shadow-sm min-h-[100px] overflow-hidden"
+                >
+                  <div className="flex items-center justify-between w-full mb-2">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        color: link.color,
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }}
+                    >
+                      {renderIcon(link.icon, 'w-5 h-5')}
+                    </div>
+
+                    <button
+                      onClick={(e) => handleCopy(e, link)}
+                      title={`Copy ${link.title}`}
+                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer"
+                    >
+                      {isCopied ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+
+                  <div>
+                    <div className="font-semibold text-xs sm:text-sm text-zinc-100 group-hover:text-white flex items-center justify-between">
+                      <span>{link.title}</span>
+                      <ExternalLink className="w-3 h-3 text-zinc-500 group-hover:text-purple-300" />
+                    </div>
+                    <div className="text-[11px] font-mono text-zinc-400 truncate mt-0.5">
+                      {link.handle}
+                    </div>
+                  </div>
+                </motion.a>
+              );
+            })}
+          </motion.div>
+        )}
+
+        {viewMode === 'dock' && (
           /* Dock View - Large touch icons */
           <motion.div
             key="dock"
@@ -299,7 +372,6 @@ export const SocialLinks: React.FC<SocialLinksProps> = ({
               ))}
             </div>
 
-            {/* Hovered/Selected Tooltip */}
             <div className="h-9 mt-2 flex items-center justify-center text-xs font-mono text-zinc-400">
               {hoveredLink ? (
                 <motion.div

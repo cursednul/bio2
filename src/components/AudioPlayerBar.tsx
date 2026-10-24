@@ -1,21 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, Volume2, Volume1, VolumeX, Disc3 } from 'lucide-react';
+import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Music2, Plus } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
 
 interface AudioPlayerBarProps {
   theme: ThemeConfig;
   showToast: (msg: string) => void;
+  activeSongTitle?: string;
+  activeSongArtist?: string;
+  activeSongUrl?: string;
+  onOpenUpload?: () => void;
 }
 
-const AUDIO_SRC = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/assets/aistudio/Gigi_D_agostino_-_L_amour_Toujours__Tanzen_Vision_Rmx__6f45e248.mp3`;
+const DEFAULT_AUDIO_SRC = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/assets/aistudio/Gigi_D_agostino_-_L_amour_Toujours__Tanzen_Vision_Rmx__6f45e248.mp3`;
 
-export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast }) => {
+export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
+  theme,
+  showToast,
+  activeSongTitle = "L'amour Toujours",
+  activeSongArtist = "Gigi D'Agostino",
+  activeSongUrl,
+  onOpenUpload,
+}) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  const currentAudioSrc = activeSongUrl && activeSongUrl.trim() ? activeSongUrl : DEFAULT_AUDIO_SRC;
 
   // Volume state
   const [volume, setVolume] = useState<number>(() => {
@@ -34,6 +47,24 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast
   const [isMuted, setIsMuted] = useState(false);
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+
+  // When track source changes, update audio element
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const wasPlaying = isPlaying;
+    audio.src = currentAudioSrc;
+    audio.load();
+    setCurrentTime(0);
+
+    if (wasPlaying) {
+      audio
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+    }
+  }, [currentAudioSrc]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -67,12 +98,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
-      showToast('Paused L\'amour Toujours');
+      showToast(`Paused ${activeSongTitle}`);
     } else {
       try {
         await audio.play();
         setIsPlaying(true);
-        showToast('Playing L\'amour Toujours 🎵');
+        showToast(`Playing ${activeSongTitle} 🎵`);
       } catch {
         showToast('Click again to start audio playback');
       }
@@ -84,13 +115,11 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast
     const audio = audioRef.current;
     if (!audio) return;
 
-    // On mobile touch, if slider is hidden, open it first
     if (!showVolumeSlider) {
       setShowVolumeSlider(true);
       return;
     }
 
-    // If slider is already open, toggle mute
     if (isMuted || volume === 0) {
       const restore = prevVolume > 0 ? prevVolume : 0.8;
       setIsMuted(false);
@@ -156,10 +185,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast
       }}
       className="fixed left-1/2 -translate-x-1/2 z-40 px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/90 border border-white/15 backdrop-blur-xl shadow-2xl flex items-center gap-2.5 text-xs w-[calc(100vw-1.5rem)] max-w-lg touch-manipulation"
     >
-      {/* Hidden audio element pointing to the user attachment */}
+      {/* Hidden audio element */}
       <audio
         ref={audioRef}
-        src={AUDIO_SRC}
+        src={currentAudioSrc}
         loop
         preload="metadata"
       />
@@ -177,16 +206,21 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast
       <div className="flex-1 min-w-0 pr-0.5">
         <div className="flex items-center justify-between gap-1 mb-1">
           <div className="flex items-center gap-1.5 truncate">
-            <span className="font-semibold text-zinc-100 text-xs truncate">
-              L'amour Toujours
+            <span className="font-semibold text-zinc-100 text-xs truncate max-w-[130px] sm:max-w-[200px]" title={activeSongTitle}>
+              {activeSongTitle}
             </span>
+            {activeSongArtist && (
+              <span className="text-[10px] text-zinc-400 truncate hidden sm:inline">
+                · {activeSongArtist}
+              </span>
+            )}
             {isPlaying && !isMuted && volume > 0 && (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             )}
           </div>
 
           <span className="text-[10px] font-mono text-zinc-400 shrink-0">
-            {formatTime(currentTime)} / {formatTime(duration || 423)}
+            {formatTime(currentTime)} / {formatTime(duration || 0)}
           </span>
         </div>
 
@@ -198,12 +232,24 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast
             max={duration || 100}
             value={currentTime}
             onChange={handleSeek}
-            className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-purple-500 hover:accent-purple-400 transition-all touch-pan-x"
+            className="w-full h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-purple-500 transition-all touch-pan-x focus:outline-none focus:ring-0"
           />
         </div>
       </div>
 
-      {/* Play/Pause Button - Touch optimized size (min 38px) */}
+      {/* Upload / Switch Song button if provided */}
+      {onOpenUpload && (
+        <button
+          onClick={onOpenUpload}
+          className="w-8 h-8 rounded-xl bg-white/5 active:bg-white/15 hover:bg-white/10 text-purple-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+          title="Upload MP3 or Change Song"
+          aria-label="Upload MP3 or change song"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Play/Pause Button - Touch optimized size */}
       <button
         onClick={togglePlay}
         className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-92 text-white flex items-center justify-center shadow-md cursor-pointer shrink-0 transition-transform"
@@ -244,7 +290,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ theme, showToast
                 step="0.01"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-16 h-1.5 bg-white/25 rounded-lg appearance-none cursor-pointer accent-purple-400 touch-pan-x"
+                className="w-16 h-1.5 bg-white/25 rounded-full appearance-none cursor-pointer accent-purple-500 transition-all touch-pan-x focus:outline-none focus:ring-0"
                 title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
               />
               <button

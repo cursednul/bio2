@@ -1,6 +1,6 @@
 import React, { useState, useRef, MouseEvent } from 'react';
 import { motion } from 'motion/react';
-import { Copy, Check, Share2, Music2, Gamepad2 } from 'lucide-react';
+import { Copy, Check, Share2, Music2, Gamepad2, Play } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
 
@@ -10,7 +10,12 @@ interface ProfileCardProps {
   showToast: (msg: string) => void;
   favGame?: string;
   favSong?: string;
+  nickname?: string;
+  bioEmoticon?: string;
+  avatarUrl?: string;
 }
+
+const DEFAULT_AVATAR = 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcTSW4n6wBabxHT5KCZgbMQ84MXD3KQ1JESGSzBWthTMzRN_SiO2';
 
 export const ProfileCard: React.FC<ProfileCardProps> = ({
   theme,
@@ -18,6 +23,9 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
   showToast,
   favGame = 'Watch Dogs 2',
   favSong = "L'amour Toujours",
+  nickname = 'cursed',
+  bioEmoticon = '(˶>⩊<˶)',
+  avatarUrl,
 }) => {
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -60,8 +68,8 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
     }
   };
 
-  // Letters of "cursed" for playful kinetic hover interaction
-  const titleLetters = 'cursed'.split('');
+  const titleLetters = (nickname || 'cursed').split('');
+  const activeAvatar = avatarUrl && avatarUrl.trim() ? avatarUrl : DEFAULT_AVATAR;
 
   return (
     <div className="relative w-full max-w-md mx-auto perspective-1000 px-2 sm:px-0">
@@ -99,7 +107,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
 
         {/* Card Face Content */}
         <div className="flex flex-col items-center text-center relative z-20">
-          {/* Top Share Action Row - Touch target min 44px */}
+          {/* Top Share Action Row */}
           <div className="w-full flex items-center justify-end mb-1 text-xs text-zinc-400">
             <button
               onClick={onShare}
@@ -113,7 +121,6 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
 
           {/* Avatar with Smooth Hologram Glow Aura */}
           <div className="relative my-1 sm:my-2">
-            {/* Aura rings */}
             <motion.div
               animate={{
                 scale: [1, 1.14, 1],
@@ -138,8 +145,8 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
             >
               <div className="w-full h-full rounded-full overflow-hidden bg-zinc-900 relative">
                 <img
-                  src="https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcTSW4n6wBabxHT5KCZgbMQ84MXD3KQ1JESGSzBWthTMzRN_SiO2"
-                  alt="cursed profile avatar"
+                  src={activeAvatar}
+                  alt={`${nickname} avatar`}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
@@ -183,7 +190,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
             </h1>
           </div>
 
-          {/* Subtitle Handle with Copy Interaction - Min 44px tap target */}
+          {/* Subtitle Handle with Copy Interaction */}
           <motion.button
             onClick={copyUsername}
             whileHover={{ scale: 1.04 }}
@@ -199,22 +206,28 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
             )}
           </motion.button>
 
-          {/* Static Bio */}
+          {/* Bio / Emoticon tag */}
           <div className="mt-3.5 flex flex-col items-center">
             <span className="text-xl sm:text-2xl font-mono text-zinc-100 py-1 px-3.5 rounded-xl bg-white/5 border border-white/5 select-none">
-              (˶&gt;⩊&lt;˶)
+              {bioEmoticon}
             </span>
           </div>
 
-          {/* Static Favorite Game & Song Status Strip */}
+          {/* Dynamic Favorite Game & Song Status Strip */}
           <div className="mt-5 sm:mt-6 w-full pt-4 border-t border-white/10 flex items-center justify-between text-[11px] text-zinc-400 gap-2">
-            <div className="flex items-center gap-1.5 truncate text-left">
+            <div className="flex items-center gap-1.5 truncate text-left select-none">
               <Gamepad2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-              <span className="truncate font-medium text-zinc-300">{favGame}</span>
+              <span className="truncate font-medium text-zinc-300">
+                {favGame}
+              </span>
             </div>
+
             <div className="flex items-center gap-1.5 text-zinc-400 shrink-0 text-right">
               <Music2 className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-              <span className="font-mono text-[10px] text-zinc-300 truncate max-w-[150px] sm:max-w-[180px]" title={favSong}>
+              <span
+                className="font-mono text-[10px] text-zinc-300 truncate max-w-[150px] sm:max-w-[180px]"
+                title={favSong}
+              >
                 {favSong}
               </span>
             </div>
