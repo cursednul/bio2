@@ -45,23 +45,9 @@ export async function storeAudioBlob(id: string, file: Blob, title: string, arti
       tx.onerror = () => reject(tx.error);
     });
 
-    // If file is under 2.5MB, convert to Data URL for portable playback
-    if (file.size <= 2.5 * 1024 * 1024 && file instanceof File) {
-      const dataUrl = await fileToDataUrl(file);
-      return dataUrl;
-    }
-
-    // Otherwise return track ID or object URL
     const objectUrl = URL.createObjectURL(file);
     return objectUrl;
   } catch {
-    if (file instanceof File) {
-      try {
-        return await fileToDataUrl(file);
-      } catch {
-        return URL.createObjectURL(file);
-      }
-    }
     return URL.createObjectURL(file);
   }
 }
@@ -70,8 +56,8 @@ export async function getStoredAudioUrl(idOrUrl: string): Promise<string | null>
   if (!idOrUrl || !idOrUrl.trim()) return null;
   const clean = idOrUrl.trim();
 
-  // If it's a data URL or http/https URL, return as-is
-  if (clean.startsWith('data:') || clean.startsWith('http://') || clean.startsWith('https://')) {
+  // If it's a blob URL, data URL, or http/https URL, return as-is
+  if (clean.startsWith('blob:') || clean.startsWith('data:') || clean.startsWith('http://') || clean.startsWith('https://')) {
     return clean;
   }
 
@@ -98,7 +84,6 @@ export async function getStoredAudioUrl(idOrUrl: string): Promise<string | null>
     }
   }
 
-  // Return as-is if it's already a blob URL or path
   return clean;
 }
 

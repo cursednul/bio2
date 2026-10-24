@@ -316,15 +316,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       if (selectedFile) {
         sourceType = 'upload';
         duration = await calculateAudioDuration(selectedFile);
-        try {
-          const dataUrl = await fileToDataUrl(selectedFile);
-          firestoreAudioUrl = dataUrl;
-          finalAudioUrl = dataUrl;
-        } catch {
-          showToast('Failed to read MP3 file');
-          setIsUploadingTrack(false);
-          return;
-        }
+        const trackId = `track_${Date.now()}`;
+
+        // Store file in local IndexedDB storage and get direct Object URL
+        finalAudioUrl = await storeAudioBlob(trackId, selectedFile, cleanTitle, cleanArtist);
+        firestoreAudioUrl = trackId;
       }
 
       // Add to Firestore tracks collection on server
@@ -337,8 +333,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         createdAt: new Date().toISOString(),
       });
 
-      // Update active song in Firestore global settings for all visitors/devices
-      onSetActiveSong(cleanTitle, cleanArtist, firestoreAudioUrl);
+      // Update active song with direct object URL and sync track ID to Firestore
+      onSetActiveSong(cleanTitle, cleanArtist, finalAudioUrl);
       onSetFavSong(cleanTitle);
 
       await saveGlobalSettingsToFirestore({
@@ -367,7 +363,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const handleActivateTrack = async (track: AudioTrack) => {
     sound.playClick();
-    onSetActiveSong(track.title, track.artist, track.audioUrl);
+    const resolvedUrl = (await getStoredAudioUrl(track.audioUrl)) || track.audioUrl;
+    onSetActiveSong(track.title, track.artist, resolvedUrl);
     onSetFavSong(track.title);
 
     await saveGlobalSettingsToFirestore({

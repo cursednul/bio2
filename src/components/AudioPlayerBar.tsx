@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
+import { getStoredAudioUrl } from '../utils/audioStorage';
 
 interface AudioPlayerBarProps {
   theme: ThemeConfig;
@@ -25,6 +26,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>('');
 
   // Volume state
   const [volume, setVolume] = useState<number>(() => {
@@ -44,12 +46,35 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // Directly assign activeSongUrl from Firestore server
+  // Resolve activeSongUrl (handles Blob Object URLs, Data URLs, IndexedDB IDs, stream links)
+  useEffect(() => {
+    let isMounted = true;
+    async function resolveSrc() {
+      if (!activeSongUrl || !activeSongUrl.trim()) {
+        if (isMounted) setResolvedAudioSrc('');
+        return;
+      }
+      try {
+        const resolved = await getStoredAudioUrl(activeSongUrl);
+        if (isMounted) {
+          setResolvedAudioSrc(resolved || activeSongUrl || '');
+        }
+      } catch {
+        if (isMounted) setResolvedAudioSrc(activeSongUrl || '');
+      }
+    }
+    resolveSrc();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSongUrl]);
+
+  // When resolved track source changes, update audio element
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (!activeSongUrl || !activeSongUrl.trim()) {
+    if (!resolvedAudioSrc) {
       audio.removeAttribute('src');
       audio.load();
       setIsPlaying(false);
@@ -58,12 +83,11 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       return;
     }
 
-    // Set src directly from Firestore data
-    audio.src = activeSongUrl;
+    audio.src = resolvedAudioSrc;
     audio.load();
     setCurrentTime(0);
 
-    // Mobile Android Chrome handling: auto-resume playback if active
+    // Auto-resume playback if active
     if (isPlaying) {
       const handleCanPlay = () => {
         audio
@@ -80,7 +104,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         audio.removeEventListener('canplay', handleCanPlay);
       };
     }
-  }, [activeSongUrl]);
+  }, [resolvedAudioSrc]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -111,7 +135,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     if (audio?.error) {
       console.warn('Audio media error encountered:', audio.error);
       setIsPlaying(false);
-      showToast('Audio stream error. Check audio URL in Admin');
+      showToast('Audio stream error. Check audio source in Admin');
     }
   };
 
@@ -120,15 +144,15 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (!activeSongUrl || !activeSongUrl.trim()) {
-      showToast('No audio loaded in database. Add a track in Admin 🎵');
+    if (!resolvedAudioSrc) {
+      showToast('No audio source available. Upload or select a track in Admin 🎵');
       if (onOpenUpload) onOpenUpload();
       return;
     }
 
-    // Ensure audio element source matches current active song URL
-    if (audio.src !== activeSongUrl) {
-      audio.src = activeSongUrl;
+    // Ensure audio element source matches current resolved source
+    if (audio.src !== resolvedAudioSrc) {
+      audio.src = resolvedAudioSrc;
       audio.load();
     }
 
@@ -224,7 +248,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     return <Volume2 className="w-4 h-4 text-purple-300" />;
   };
 
-  const displayTitle = activeSongTitle || (activeSongUrl ? 'Playing Song' : 'No Track Selected');
+  const displayTitle = activeSongTitle || (resolvedAudioSrc ? 'Playing Song' : 'No Track Selected');
   const displayArtist = activeSongArtist;
 
   return (
@@ -237,7 +261,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       {/* Hidden audio element with playsInline for Android & iOS mobile devices */}
       <audio
         ref={audioRef}
-        src={activeSongUrl || undefined}
+        src={resolvedAudioSrc || undefined}
         loop
         playsInline
         preload="auto"
