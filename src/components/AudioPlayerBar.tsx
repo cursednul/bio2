@@ -57,7 +57,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
         if (isMounted) {
-          setResolvedAudioSrc(resolved || activeSongUrl);
+          setResolvedAudioSrc(resolved || activeSongUrl || '');
         }
       } catch {
         if (isMounted) setResolvedAudioSrc(activeSongUrl || '');
@@ -69,7 +69,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     };
   }, [activeSongUrl]);
 
-  // When resolved track source changes, update audio element
+  // When resolved track source changes, update audio element with Android compatibility
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -83,18 +83,27 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       return;
     }
 
+    // Assign source and load media on Android
     audio.src = resolvedAudioSrc;
     audio.load();
     setCurrentTime(0);
 
+    // Mobile Android Chrome handling: wait for canplay before auto-resuming playback
     if (isPlaying) {
-      audio
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch((err) => {
-          console.warn('Playback error on track change:', err);
-          setIsPlaying(false);
-        });
+      const handleCanPlay = () => {
+        audio
+          .play()
+          .then(() => setIsPlaying(true))
+          .catch((err) => {
+            console.warn('Android playback error on track change:', err);
+            setIsPlaying(false);
+          });
+      };
+
+      audio.addEventListener('canplay', handleCanPlay, { once: true });
+      return () => {
+        audio.removeEventListener('canplay', handleCanPlay);
+      };
     }
   }, [resolvedAudioSrc]);
 
@@ -127,7 +136,11 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     if (audio?.error) {
       console.warn('Audio media error encountered:', audio.error);
       setIsPlaying(false);
-      showToast('Audio source error. Please check URL or upload track');
+      if (activeSongUrl?.startsWith('track_')) {
+        showToast('Local PC track not stored on Android. Use Stream Presets in Admin 🎵');
+      } else {
+        showToast('Audio stream error on this device');
+      }
     }
   };
 
@@ -136,10 +149,17 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (!resolvedAudioSrc) {
-      showToast('No audio loaded. Upload or select a track in Admin 🎵');
+    // Check if track was an un-synced local track ID from another device
+    if (!resolvedAudioSrc || (activeSongUrl?.startsWith('track_') && !resolvedAudioSrc.startsWith('blob:') && !resolvedAudioSrc.startsWith('data:'))) {
+      showToast('Track saved locally on PC. Pick a Stream Preset for Android 🎵');
       if (onOpenUpload) onOpenUpload();
       return;
+    }
+
+    // Ensure audio element source matches current resolved source
+    if (audio.src !== resolvedAudioSrc) {
+      audio.src = resolvedAudioSrc;
+      audio.load();
     }
 
     if (isPlaying) {
@@ -155,12 +175,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         setIsPlaying(true);
         showToast(`Playing ${activeSongTitle || 'Track'} 🎵`);
       } catch (err: any) {
-        console.warn('Playback failed:', err);
+        console.warn('Android play failed:', err);
         setIsPlaying(false);
         if (err?.name === 'NotAllowedError') {
-          showToast('Tap play to start audio 🎵');
+          showToast('Tap play again to enable audio on Android 🎵');
         } else {
-          showToast(`Unable to play ${activeSongTitle || 'audio'}`);
+          showToast(`Tap play again to start ${activeSongTitle || 'track'}`);
         }
       }
     }
@@ -244,12 +264,13 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       }}
       className="fixed left-1/2 -translate-x-1/2 z-40 px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/90 border border-white/15 backdrop-blur-xl shadow-2xl flex items-center gap-2.5 text-xs w-[calc(100vw-1.5rem)] max-w-lg touch-manipulation"
     >
-      {/* Hidden audio element */}
+      {/* Hidden audio element with playsInline for Android & iOS mobile devices */}
       <audio
         ref={audioRef}
         src={resolvedAudioSrc || undefined}
         loop
-        preload="metadata"
+        playsInline
+        preload="auto"
         onError={handleAudioError}
       />
 
