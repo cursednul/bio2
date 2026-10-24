@@ -431,7 +431,7 @@ export default function App() {
         activeSongTitle={activeSongTitle}
         activeSongArtist={activeSongArtist}
         activeSongUrl={activeSongUrl}
-        onOpenUpload={() => setIsAdminModalOpen(true)}
+        onOpenUpload={isAdmin ? () => setIsAdminModalOpen(true) : undefined}
       />
 
       {/* Secret Admin Control Suite */}

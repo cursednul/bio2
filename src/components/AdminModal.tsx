@@ -39,7 +39,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { SocialsViewMode, AudioTrack, GlobalSettingsDoc } from '../types';
 import { sound } from '../utils/audio';
-import { storeAudioBlob, calculateAudioDuration, getStoredAudioUrl } from '../utils/audioStorage';
+import { storeAudioBlob, calculateAudioDuration, getStoredAudioUrl, fileToDataUrl } from '../utils/audioStorage';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -319,8 +319,19 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         const trackId = `track_${Date.now()}`;
         // Store in IndexedDB
         finalAudioUrl = await storeAudioBlob(trackId, selectedFile, cleanTitle, cleanArtist);
-        // Use trackId for Firestore reference so URLs are never truncated
-        firestoreAudioUrl = trackId;
+        
+        // If file size is under 750KB, convert to Data URL for instant cross-device playback
+        if (selectedFile.size <= 750 * 1024) {
+          try {
+            const dataUrl = await fileToDataUrl(selectedFile);
+            firestoreAudioUrl = dataUrl;
+            finalAudioUrl = dataUrl;
+          } catch {
+            firestoreAudioUrl = trackId;
+          }
+        } else {
+          firestoreAudioUrl = trackId;
+        }
       }
 
       // Add to Firestore tracks collection

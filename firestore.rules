@@ -8,11 +8,12 @@ service cloud.firestore {
 
     function isValidComment(data) {
       return data.keys().hasAll(['author', 'message', 'timestamp', 'pinned']) &&
-             data.keys().hasOnly(['author', 'message', 'timestamp', 'pinned', 'createdAt']) &&
+             data.keys().hasOnly(['author', 'message', 'timestamp', 'pinned', 'createdAt', 'replies']) &&
              data.author is string && data.author.size() <= 32 &&
              data.message is string && data.message.size() > 0 && data.message.size() <= 300 &&
              data.timestamp is string && data.timestamp.size() <= 64 &&
-             data.pinned is bool;
+             data.pinned is bool &&
+             (!('replies' in data) || data.replies is list);
     }
 
     function isValidGlobalSettings(data) {
@@ -29,7 +30,7 @@ service cloud.firestore {
              (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512)) &&
              (!('activeSongTitle' in data) || (data.activeSongTitle is string && data.activeSongTitle.size() <= 100)) &&
              (!('activeSongArtist' in data) || (data.activeSongArtist is string && data.activeSongArtist.size() <= 100)) &&
-             (!('activeSongUrl' in data) || (data.activeSongUrl is string && data.activeSongUrl.size() <= 1000));
+             (!('activeSongUrl' in data) || (data.activeSongUrl is string && data.activeSongUrl.size() <= 1000000));
     }
 
     function isValidTrack(data) {
@@ -37,7 +38,7 @@ service cloud.firestore {
              data.keys().hasOnly(['title', 'artist', 'audioUrl', 'sourceType', 'duration', 'createdAt']) &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
              data.artist is string && data.artist.size() <= 100 &&
-             data.audioUrl is string && data.audioUrl.size() > 0 && data.audioUrl.size() <= 1000 &&
+             data.audioUrl is string && data.audioUrl.size() > 0 && data.audioUrl.size() <= 1000000 &&
              data.sourceType in ['url', 'upload', 'preset'] &&
              (!('duration' in data) || data.duration is number);
     }
