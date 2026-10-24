@@ -317,6 +317,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         sourceType = 'upload';
         duration = await calculateAudioDuration(selectedFile);
 
+        // Check if file exceeds Firestore's 1MB document limit (~750KB max for Base64 payload)
+        if (selectedFile.size > 750 * 1024) {
+          showToast('File too large (>750KB). Use a smaller MP3 or a stream URL!');
+          setIsUploadingTrack(false);
+          return;
+        }
+
         try {
           // Convert to Data URL for server-side storage (Firestore)
           const dataUrl = await fileToDataUrl(selectedFile);
