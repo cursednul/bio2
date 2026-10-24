@@ -1,6 +1,6 @@
 {
-  "name": "cursed — Interactive Motion Profile",
-  "description": "An ultra-interactive personal universe with 3D card tilt physics, reactive kinetic ribbons, procedural ambient soundscapes, interactive widgets, and motion playgrounds.",
+  "name": "Bio",
+  "description": "",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
