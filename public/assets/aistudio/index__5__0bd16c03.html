@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cursed — profile</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --purple: #534AB7;
+      --purple-light: #7F77DD;
+      --white: #FFFFFF;
+      --bg: #FAFAFA;
+      --text: #1F1F1F;
+      --text-dim: #737373;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0F0F0F;
+        --text: #F5F5F5;
+        --text-dim: #A3A3A3;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Animated background lines */
+    .bg-animation {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .line {
+      stroke: var(--purple);
+      stroke-width: 1;
+      opacity: 0.15;
+      filter: blur(0.5px);
+    }
+
+    .line1 {
+      animation: flow1 8s linear infinite;
+    }
+
+    .line2 {
+      animation: flow2 10s linear infinite;
+    }
+
+    .line3 {
+      animation: flow3 12s linear infinite;
+    }
+
+    .line4 {
+      animation: flow4 9s linear infinite;
+    }
+
+    .line5 {
+      animation: flow5 11s linear infinite;
+    }
+
+    @keyframes flow1 {
+      from {
+        stroke-dashoffset: 0;
+      }
+      to {
+        stroke-dashoffset: -1000;
+      }
+    }
+
+    @keyframes flow2 {
+      from {
+        stroke-dashoffset: 0;
+      }
+      to {
+        stroke-dashoffset: -1200;
+      }
+    }
+
+    @keyframes flow3 {
+      from {
+        stroke-dashoffset: 0;
+      }
+      to {
+        stroke-dashoffset: -1400;
+      }
+    }
+
+    @keyframes flow4 {
+      from {
+        stroke-dashoffset: 0;
+      }
+      to {
+        stroke-dashoffset: -900;
+      }
+    }
+
+    @keyframes flow5 {
+      from {
+        stroke-dashoffset: 0;
+      }
+      to {
+        stroke-dashoffset: -1100;
+      }
+    }
+
+    /* Glow effect */
+    .glow-circle {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--purple-light) 0%, transparent 70%);
+      opacity: 0.08;
+      animation: float 6s ease-in-out infinite;
+    }
+
+    .glow-1 {
+      width: 300px;
+      height: 300px;
+      top: -100px;
+      right: -100px;
+      animation-delay: 0s;
+    }
+
+    .glow-2 {
+      width: 200px;
+      height: 200px;
+      bottom: -50px;
+      left: -50px;
+      animation-delay: 3s;
+    }
+
+    @keyframes float {
+      0%, 100% {
+        transform: translateY(0px);
+      }
+      50% {
+        transform: translateY(20px);
+      }
+    }
+
+    .container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .card {
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .avatar {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: var(--purple);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      animation: avatarPulse 2s ease-in-out infinite;
+      overflow: hidden;
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    @keyframes avatarPulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(83, 74, 183, 0.7);
+      }
+      50% {
+        box-shadow: 0 0 0 10px rgba(83, 74, 183, 0);
+      }
+    }
+
+    h1 {
+      display: table;
+      margin: 0 auto 8px;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: 0.015em;
+      color: transparent;
+      background: linear-gradient(110deg, #a79bff 0%, #d9d0ff 20%, #ffffff 35%, #a99aff 48%, #f0eaff 58%, #8b7cff 76%, #ded6ff 88%, #a79bff 100%);
+      background-size: 280% 100%;
+      background-position: 100% 50%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      filter: drop-shadow(0 0 7px rgba(167, 139, 250, .4));
+      animation: fadeUp .8s .25s both, cursedGlimmer 3.4s ease-in-out infinite;
+      transition: letter-spacing .45s ease, filter .45s ease;
+    }
+
+    h1:hover {
+      letter-spacing: 0.09em;
+      filter: drop-shadow(0 0 14px rgba(196, 181, 253, .95));
+    }
+
+    @keyframes cursedGlimmer {
+      0%, 100% { background-position: 100% 50%; filter: drop-shadow(0 0 5px rgba(167, 139, 250, .3)); }
+      50% { background-position: 0% 50%; filter: drop-shadow(0 0 12px rgba(196, 181, 253, .8)); }
+    }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+
+    .bio {
+      color: var(--text-dim);
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 40px;
+    }
+
+    .socials {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .social-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--white);
+      border: 1.5px solid #E5E5E5;
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--purple);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .social-icon {
+        background: #1A1A1A;
+        border-color: #333333;
+      }
+    }
+
+    .social-icon svg {
+      width: 20px;
+      height: 20px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .social-icon::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: var(--purple);
+      opacity: 0.1;
+      transition: left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      border-radius: 8px;
+    }
+
+    .social-icon:hover {
+      border-color: var(--purple);
+      transform: translateY(-4px);
+    }
+
+    .social-icon:hover::before {
+      left: 0;
+    }
+
+    .social-icon:hover svg {
+      animation: iconBounce 0.6s ease;
+    }
+
+    @keyframes iconBounce {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-4px);
+      }
+    }
+
+    /* Smooth cursed / lavender motion */
+    :root { --purple: #9b6dff; --purple-light: #d7a7ff; }
+    body {
+      background: radial-gradient(ellipse at 50% 40%, rgba(105, 65, 155, .18), transparent 58%), var(--bg);
+      isolation: isolate;
+    }
+    .bg-animation { opacity: .9; }
+    .line { stroke: #b58aff; opacity: .22; stroke-width: 1.25; }
+    .line1 { animation: flow1 16s linear infinite; }
+    .line2 { animation: flow2 21s linear infinite reverse; }
+    .line3 { animation: flow3 25s linear infinite; }
+    .line4 { animation: flow4 19s linear infinite reverse; }
+    .line5 { animation: flow5 23s linear infinite; }
+    .glow-circle { opacity: .15; filter: blur(12px); }
+    .glow-1 { animation: float 10s ease-in-out infinite, glowBreathe 7s ease-in-out infinite; }
+    .glow-2 { animation: float 12s ease-in-out infinite reverse, glowBreathe 9s ease-in-out infinite reverse; }
+    .container { perspective: 1000px; }
+    .card {
+      padding: 34px 28px 30px;
+      border: 1px solid rgba(183, 142, 255, .2);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, .035);
+      box-shadow: 0 18px 70px rgba(74, 35, 120, .10), inset 0 1px rgba(255,255,255,.08);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      animation: cardEnter 1.1s cubic-bezier(.2,.8,.2,1) both;
+      transition: transform .5s cubic-bezier(.2,.8,.2,1), border-color .5s ease, box-shadow .5s ease;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(183, 142, 255, .42);
+      box-shadow: 0 25px 85px rgba(100, 50, 160, .17), inset 0 1px rgba(255,255,255,.12);
+    }
+    .avatar {
+      width: 104px; height: 104px; margin-bottom: 25px;
+      border: 2px solid rgba(213, 174, 255, .9);
+      box-shadow: 0 0 0 6px rgba(155,109,255,.08), 0 0 28px rgba(155,109,255,.32);
+      animation: avatarFloat 5s ease-in-out infinite, avatarAura 4s ease-in-out infinite;
+      will-change: transform, box-shadow;
+    }
+    .avatar img { transition: transform .8s cubic-bezier(.2,.8,.2,1), filter .8s ease; }
+    .avatar:hover img { transform: scale(1.09) rotate(-2deg); filter: saturate(1.12); }
+    h1 {
+      letter-spacing: .08em;
+      text-transform: lowercase;
+      text-shadow: 0 0 24px rgba(181,138,255,.28);
+      animation: textReveal .9s .18s both, cursedGlimmer 3.4s ease-in-out infinite;
+    }
+    .subtitle, .bio { animation: fadeUp .9s .32s both; }
+    .social-icon {
+      border-color: rgba(181,138,255,.25);
+      border-radius: 14px;
+      box-shadow: 0 5px 18px rgba(80,40,130,.06);
+      transition: transform .45s cubic-bezier(.2,.8,.2,1), background .35s ease, border-color .35s ease, box-shadow .45s ease;
+      animation: fadeUp .7s both;
+    }
+    .social-icon:nth-child(1) { animation-delay: .35s; }
+    .social-icon:nth-child(2) { animation-delay: .42s; }
+    .social-icon:nth-child(3) { animation-delay: .49s; }
+    .social-icon:nth-child(4) { animation-delay: .56s; }
+    .social-icon:nth-child(5) { animation-delay: .63s; }
+    .social-icon:nth-child(6) { animation-delay: .70s; }
+    .social-icon:hover {
+      transform: translateY(-6px) scale(1.06);
+      background: rgba(155,109,255,.12);
+      border-color: #b58aff;
+      box-shadow: 0 10px 28px rgba(155,109,255,.2);
+    }
+    .social-icon svg { transition: transform .45s cubic-bezier(.2,.8,.2,1); }
+    .social-icon:hover svg { animation: none; transform: rotate(-6deg) scale(1.12); }
+    @keyframes cardEnter {
+      from { opacity: 0; transform: translateY(24px) scale(.97); filter: blur(8px); }
+      to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes textReveal {
+      from { opacity: 0; letter-spacing: .22em; filter: blur(5px); }
+      to { opacity: 1; letter-spacing: .08em; filter: blur(0); }
+    }
+    @keyframes avatarFloat {
+      0%, 100% { transform: translateY(0) rotate(0); }
+      50% { transform: translateY(-7px) rotate(1deg); }
+    }
+    @keyframes avatarAura {
+      0%, 100% { box-shadow: 0 0 0 5px rgba(155,109,255,.07), 0 0 22px rgba(155,109,255,.24); }
+      50% { box-shadow: 0 0 0 9px rgba(155,109,255,.035), 0 0 38px rgba(155,109,255,.42); }
+    }
+    @keyframes glowBreathe {
+      0%, 100% { opacity: .09; transform: scale(.96); }
+      50% { opacity: .2; transform: scale(1.08); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-animation">
+    <div class="glow-circle glow-1"></div>
+    <div class="glow-circle glow-2"></div>
+    <svg viewBox="0 0 1000 1000" preserveAspectRatio="none">
+      <path class="line line1" d="M 0 200 Q 250 150, 500 200 T 1000 200" fill="none" stroke-dasharray="100 50" />
+      <path class="line line2" d="M 0 400 Q 250 350, 500 400 T 1000 400" fill="none" stroke-dasharray="120 60" />
+      <path class="line line3" d="M 0 600 Q 250 550, 500 600 T 1000 600" fill="none" stroke-dasharray="140 70" />
+      <path class="line line4" d="M 0 300 Q 250 250, 500 300 T 1000 300" fill="none" stroke-dasharray="110 55" />
+      <path class="line line5" d="M 0 500 Q 250 450, 500 500 T 1000 500" fill="none" stroke-dasharray="130 65" />
+    </svg>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <div class="avatar"><img src="https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcTSW4n6wBabxHT5KCZgbMQ84MXD3KQ1JESGSzBWthTMzRN_SiO2" alt="Anime catgirl profile picture"></div>
+      <h1>cursed</h1>
+      <p class="subtitle">@cursednul</p>
+      <p class="bio">(˶>⩊<˶)</p>
+      
+      <div class="socials">
+        <!-- Telegram -->
+        <a href="https://t.me/cursednul" target="_blank" rel="noopener noreferrer" class="social-icon" title="Telegram">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.643-.204-.658-.643.135-.953l11.56-4.441c.538-.196 1.006.128.832.941z"/>
+          </svg>
+        </a>
+
+        <!-- TikTok -->
+        <a href="https://www.tiktok.com/@cursednul" target="_blank" rel="noopener noreferrer" class="social-icon" title="TikTok">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.68v12.7a2.85 2.85 0 1 1-2.45-2.92c.41 0 .81.04 1.2.12V7.07a6.3 6.3 0 0 0-1.02-.08A6.34 6.34 0 0 0 5.4 19.86a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.6a4.7 4.7 0 0 1-.4-.05z"/>
+          </svg>
+        </a>
+
+        <!-- Instagram -->
+        <a href="https://www.instagram.com/cursednul/" target="_blank" rel="noopener noreferrer" class="social-icon" title="Instagram">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zM5.838 12a6.162 6.162 0 1112.324 0 6.162 6.162 0 01-12.324 0zM12 16a4 4 0 110-8 4 4 0 010 8zm4.965-10.322a1.44 1.44 0 110-2.881 1.44 1.44 0 010 2.881z"/>
+          </svg>
+        </a>
+
+        <!-- YouTube -->
+        <a href="https://www.youtube.com/@cursednul" target="_blank" rel="noopener noreferrer" class="social-icon" title="YouTube">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+        </a>
+
+        <!-- Discord -->
+        <a href="https://discord.com/users/910428526614810674" target="_blank" rel="noopener noreferrer" class="social-icon" title="Discord">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.211.375-.445.865-.607 1.252a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.252.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.873-1.295 1.226-1.994a.076.076 0 0 0-.042-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.1.246.199.373.292a.077.077 0 0 1-.007.128 12.299 12.299 0 0 1-1.873.892.076.076 0 0 0-.041.107c.36.699.77 1.364 1.225 1.994a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.030.077.077 0 0 0 .032-.054c.5-4.917-.838-9.229-3.549-13.035a.061.061 0 0 0-.031-.03zM8.02 15.278c-1.122 0-2.04-1.029-2.04-2.291 0-1.263.904-2.291 2.04-2.291 1.138 0 2.058 1.029 2.04 2.291 0 1.263-.904 2.291-2.04 2.291zm7.975 0c-1.122 0-2.04-1.029-2.04-2.291 0-1.263.904-2.291 2.04-2.291 1.138 0 2.058 1.029 2.04 2.291 0 1.263-.902 2.291-2.04 2.291z"/>
+          </svg>
+        </a>
+
+        <!-- Steam -->
+        <a href="https://steamcommunity.com/profiles/76561199522386013/" target="_blank" rel="noopener noreferrer" class="social-icon" title="Steam">
+          <svg viewBox="0 0 32 32" fill="currentColor">
+            <path d="M18.102 12.129c0-0 0-0 0-0.001 0-1.564 1.268-2.831 2.831-2.831s2.831 1.268 2.831 2.831c0 1.564-1.267 2.831-2.831 2.831-0 0-0 0-0.001 0h0c-0 0-0 0-0.001 0-1.563 0-2.83-1.267-2.83-2.83 0-0 0-0 0-0.001v0zM24.691 12.135c0-2.081-1.687-3.768-3.768-3.768s-3.768 1.687-3.768 3.768c0 2.081 1.687 3.768 3.768 3.768v0c2.080-0.003 3.765-1.688 3.768-3.767v-0zM10.427 23.76l-1.841-0.762c0.524 1.078 1.611 1.808 2.868 1.808 1.317 0 2.448-0.801 2.93-1.943l0.008-0.021c0.155-0.362 0.246-0.784 0.246-1.226 0-1.757-1.424-3.181-3.181-3.181-0.405 0-0.792 0.076-1.148 0.213l0.022-0.007 1.903 0.787c0.852 0.364 1.439 1.196 1.439 2.164 0 1.296-1.051 2.347-2.347 2.347-0.324 0-0.632-0.066-0.913-0.184l0.015 0.006zM15.974 1.004c-7.857 0.001-14.301 6.046-14.938 13.738l-0.004 0.054 8.038 3.322c0.668-0.462 1.495-0.737 2.387-0.737 0.001 0 0.002 0 0.002 0h-0c0.079 0 0.156 0.005 0.235 0.008l3.575-5.176v-0.074c0.003-3.12 2.533-5.648 5.653-5.648 3.122 0 5.653 2.531 5.653 5.653s-2.531 5.653-5.653 5.653h-0.131l-5.094 3.638c0 0.065 0.005 0.131 0.005 0.199 0 0.001 0 0.002 0 0.003 0 2.342-1.899 4.241-4.241 4.241-2.047 0-3.756-1.451-4.153-3.38l-0.005-0.027-5.755-2.383c1.841 6.345 7.601 10.905 14.425 10.905 8.281 0 14.994-6.713 14.994-14.994s-6.713-14.994-14.994-14.994c-0 0-0.001 0-0.001 0h0z"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
