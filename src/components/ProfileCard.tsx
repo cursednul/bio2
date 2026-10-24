@@ -22,7 +22,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
   onShare,
   showToast,
   favGame = 'Watch Dogs 2',
-  favSong = "L'amour Toujours",
+  favSong = 'Cyberpunk Synthwave',
   nickname = 'cursed',
   bioEmoticon = '(˶>⩊<˶)',
   avatarUrl,

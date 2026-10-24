@@ -649,11 +649,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
                         {[
                           {
-                            title: "L'amour Toujours",
-                            artist: "Gigi D'Agostino",
-                            url: `${import.meta.env.BASE_URL.replace(/\/$/, '')}/assets/aistudio/Gigi_D_agostino_-_L_amour_Toujours__Tanzen_Vision_Rmx__6f45e248.mp3`,
-                          },
-                          {
                             title: 'Cyberpunk Synthwave',
                             artist: 'Nightrunner',
                             url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=cyberpunk-2099-10701.mp3',
@@ -667,6 +662,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             title: 'Phonk Drift',
                             artist: 'Phantom Beats',
                             url: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a70512.mp3?filename=phonk-drift-110389.mp3',
+                          },
+                          {
+                            title: 'Ambient Chill Out',
+                            artist: 'Solaris',
+                            url: 'https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f131a4.mp3?filename=ambient-124464.mp3',
                           },
                         ].map((preset) => (
                           <button
@@ -711,7 +711,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. L'amour Toujours"
+                          placeholder="e.g. Cyberpunk Synthwave"
                           value={uploadSongTitle}
                           onChange={(e) => setUploadSongTitle(e.target.value)}
                           required
@@ -724,7 +724,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. Gigi D'Agostino"
+                          placeholder="e.g. Nightrunner"
                           value={uploadSongArtist}
                           onChange={(e) => setUploadSongArtist(e.target.value)}
                           className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-400"
@@ -751,7 +751,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                     {savedTracks.length === 0 ? (
                       <div className="text-center py-4 text-xs font-mono text-zinc-500">
-                        Default track active (L'amour Toujours). Upload your custom track above!
+                        No custom tracks uploaded yet. Upload an MP3 file or pick a stream preset above!
                       </div>
                     ) : (
                       <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">

@@ -58,12 +58,14 @@ export default function App() {
 
   // Live Customizable Favorite Game & Song
   const [favGame, setFavGame] = useState<string>('Watch Dogs 2');
-  const [favSong, setFavSong] = useState<string>("L'amour Toujours");
+  const [favSong, setFavSong] = useState<string>('Cyberpunk Synthwave');
 
   // Live Audio Player Song Details
-  const [activeSongTitle, setActiveSongTitle] = useState<string>("L'amour Toujours");
-  const [activeSongArtist, setActiveSongArtist] = useState<string>("Gigi D'Agostino");
-  const [activeSongUrl, setActiveSongUrl] = useState<string>('');
+  const [activeSongTitle, setActiveSongTitle] = useState<string>('Cyberpunk Synthwave');
+  const [activeSongArtist, setActiveSongArtist] = useState<string>('Nightrunner');
+  const [activeSongUrl, setActiveSongUrl] = useState<string>(
+    'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=cyberpunk-2099-10701.mp3'
+  );
 
   // Profile Customization
   const [nickname, setNickname] = useState<string>('cursed');
@@ -106,16 +108,16 @@ export default function App() {
             {
               socialsViewMode: 'cards',
               favGame: 'Watch Dogs 2',
-              favSong: "L'amour Toujours",
+              favSong: 'Cyberpunk Synthwave',
               announcement: 'Welcome to cursed · Connect on Telegram, TikTok & Discord',
               announcementActive: false,
               motionPreset: 'flow',
               nickname: 'cursed',
               bioEmoticon: '(˶>⩊<˶)',
               avatarUrl: '',
-              activeSongTitle: "L'amour Toujours",
-              activeSongArtist: "Gigi D'Agostino",
-              activeSongUrl: '',
+              activeSongTitle: 'Cyberpunk Synthwave',
+              activeSongArtist: 'Nightrunner',
+              activeSongUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=cyberpunk-2099-10701.mp3',
               updatedAt: new Date().toISOString(),
             },
             { merge: true }

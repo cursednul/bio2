@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Music2, Plus } from 'lucide-react';
+import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
 import { getStoredAudioUrl } from '../utils/audioStorage';
@@ -14,13 +14,11 @@ interface AudioPlayerBarProps {
   onOpenUpload?: () => void;
 }
 
-const DEFAULT_AUDIO_SRC = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/assets/aistudio/Gigi_D_agostino_-_L_amour_Toujours__Tanzen_Vision_Rmx__6f45e248.mp3`;
-
 export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   theme,
   showToast,
-  activeSongTitle = "L'amour Toujours",
-  activeSongArtist = "Gigi D'Agostino",
+  activeSongTitle = '',
+  activeSongArtist = '',
   activeSongUrl,
   onOpenUpload,
 }) => {
@@ -28,7 +26,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>(DEFAULT_AUDIO_SRC);
+  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>('');
 
   // Volume state
   const [volume, setVolume] = useState<number>(() => {
@@ -53,16 +51,16 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     let isMounted = true;
     async function resolveSrc() {
       if (!activeSongUrl || !activeSongUrl.trim()) {
-        if (isMounted) setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+        if (isMounted) setResolvedAudioSrc('');
         return;
       }
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
         if (isMounted) {
-          setResolvedAudioSrc(resolved || DEFAULT_AUDIO_SRC);
+          setResolvedAudioSrc(resolved || activeSongUrl);
         }
       } catch {
-        if (isMounted) setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+        if (isMounted) setResolvedAudioSrc(activeSongUrl || '');
       }
     }
     resolveSrc();
@@ -75,6 +73,15 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
+    if (!resolvedAudioSrc) {
+      audio.removeAttribute('src');
+      audio.load();
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      return;
+    }
 
     audio.src = resolvedAudioSrc;
     audio.load();
@@ -117,16 +124,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
   const handleAudioError = () => {
     const audio = audioRef.current;
-    if (
-      audio?.error &&
-      (audio.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
-        audio.error.code === MediaError.MEDIA_ERR_NETWORK)
-    ) {
-      if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
-        console.warn('Fatal audio media error encountered:', audio.error);
-        setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
-        showToast('Track URL unreachable. Default track loaded 🎵');
-      }
+    if (audio?.error) {
+      console.warn('Audio media error encountered:', audio.error);
+      setIsPlaying(false);
+      showToast('Audio source error. Please check URL or upload track');
     }
   };
 
@@ -135,10 +136,16 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
+    if (!resolvedAudioSrc) {
+      showToast('No audio loaded. Upload or select a track in Admin 🎵');
+      if (onOpenUpload) onOpenUpload();
+      return;
+    }
+
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
-      showToast(`Paused ${activeSongTitle}`);
+      showToast(`Paused ${activeSongTitle || 'Audio'}`);
     } else {
       try {
         if (audio.readyState === 0) {
@@ -146,33 +153,14 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         }
         await audio.play();
         setIsPlaying(true);
-        showToast(`Playing ${activeSongTitle} 🎵`);
+        showToast(`Playing ${activeSongTitle || 'Track'} 🎵`);
       } catch (err: any) {
         console.warn('Playback failed:', err);
         setIsPlaying(false);
-
-        const mediaError = audio.error;
-        if (
-          mediaError &&
-          (mediaError.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
-            mediaError.code === MediaError.MEDIA_ERR_NETWORK)
-        ) {
-          if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
-            setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
-            showToast('Unable to stream track. Playing default track 🎵');
-            try {
-              audio.src = DEFAULT_AUDIO_SRC;
-              audio.load();
-              await audio.play();
-              setIsPlaying(true);
-            } catch {
-              setIsPlaying(false);
-            }
-          }
-        } else if (err?.name === 'NotAllowedError') {
+        if (err?.name === 'NotAllowedError') {
           showToast('Tap play to start audio 🎵');
         } else {
-          showToast(`Tap play again to start ${activeSongTitle}`);
+          showToast(`Unable to play ${activeSongTitle || 'audio'}`);
         }
       }
     }
@@ -246,9 +234,8 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     return <Volume2 className="w-4 h-4 text-purple-300" />;
   };
 
-  const isUnresolvedLocalTrack = Boolean(activeSongUrl?.startsWith('track_') && resolvedAudioSrc === DEFAULT_AUDIO_SRC);
-  const displayTitle = isUnresolvedLocalTrack ? "L'amour Toujours" : activeSongTitle;
-  const displayArtist = isUnresolvedLocalTrack ? "Gigi D'Agostino" : activeSongArtist;
+  const displayTitle = activeSongTitle || (resolvedAudioSrc ? 'Playing Song' : 'No Track Selected');
+  const displayArtist = activeSongArtist;
 
   return (
     <div
@@ -260,7 +247,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
-        src={resolvedAudioSrc}
+        src={resolvedAudioSrc || undefined}
         loop
         preload="metadata"
         onError={handleAudioError}
@@ -279,7 +266,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       <div className="flex-1 min-w-0 pr-0.5">
         <div className="flex items-center justify-between gap-1 mb-1">
           <div className="flex items-center gap-1.5 truncate">
-            <span className="font-semibold text-zinc-100 text-xs truncate max-w-[130px] sm:max-w-[200px]" title={displayTitle}>
+            <span
+              className="font-semibold text-zinc-100 text-xs truncate max-w-[130px] sm:max-w-[200px]"
+              title={displayTitle}
+            >
               {displayTitle}
             </span>
             {displayArtist && (
