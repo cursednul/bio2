@@ -23,12 +23,21 @@ export interface SocialLink {
   color: string;
 }
 
+export interface CommentReply {
+  id: string;
+  author: string;
+  message: string;
+  timestamp: string;
+  createdAt?: string;
+}
+
 export interface CommentEntry {
   id: string;
   author: string;
   message: string;
   timestamp: string;
   pinned?: boolean;
+  replies?: CommentReply[];
 }
 
 export type SocialsViewMode = 'cards' | 'dock' | 'grid';

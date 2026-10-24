@@ -39,7 +39,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { SocialsViewMode, AudioTrack, GlobalSettingsDoc } from '../types';
 import { sound } from '../utils/audio';
-import { storeAudioBlob, calculateAudioDuration } from '../utils/audioStorage';
+import { storeAudioBlob, calculateAudioDuration, getStoredAudioUrl } from '../utils/audioStorage';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -309,6 +309,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
     try {
       let finalAudioUrl = uploadSongUrl.trim();
+      let firestoreAudioUrl = uploadSongUrl.trim();
       let duration = 0;
       let sourceType: 'upload' | 'url' = 'url';
 
@@ -316,15 +317,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         sourceType = 'upload';
         duration = await calculateAudioDuration(selectedFile);
         const trackId = `track_${Date.now()}`;
-        // Store in IndexedDB and generate URL
+        // Store in IndexedDB
         finalAudioUrl = await storeAudioBlob(trackId, selectedFile, cleanTitle, cleanArtist);
+        // Use trackId for Firestore reference so URLs are never truncated
+        firestoreAudioUrl = trackId;
       }
 
       // Add to Firestore tracks collection
-      const docRef = await addDoc(collection(db, 'tracks'), {
+      await addDoc(collection(db, 'tracks'), {
         title: cleanTitle.slice(0, 100),
         artist: cleanArtist.slice(0, 100),
-        audioUrl: finalAudioUrl.slice(0, 1000),
+        audioUrl: firestoreAudioUrl,
         sourceType,
         duration,
         createdAt: new Date().toISOString(),
@@ -337,7 +340,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       await saveGlobalSettingsToFirestore({
         activeSongTitle: cleanTitle.slice(0, 100),
         activeSongArtist: cleanArtist.slice(0, 100),
-        activeSongUrl: finalAudioUrl.slice(0, 1000),
+        activeSongUrl: firestoreAudioUrl,
         favSong: cleanTitle.slice(0, 64),
       });
 
@@ -360,13 +363,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const handleActivateTrack = async (track: AudioTrack) => {
     sound.playClick();
-    onSetActiveSong(track.title, track.artist, track.audioUrl);
+    const resolvedUrl = (await getStoredAudioUrl(track.audioUrl)) || track.audioUrl;
+    onSetActiveSong(track.title, track.artist, resolvedUrl);
     onSetFavSong(track.title);
 
     await saveGlobalSettingsToFirestore({
       activeSongTitle: track.title.slice(0, 100),
       activeSongArtist: track.artist.slice(0, 100),
-      activeSongUrl: track.audioUrl.slice(0, 1000),
+      activeSongUrl: track.audioUrl,
       favSong: track.title.slice(0, 64),
     });
 

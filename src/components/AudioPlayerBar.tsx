@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Music2, Plus } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
+import { getStoredAudioUrl } from '../utils/audioStorage';
 
 interface AudioPlayerBarProps {
   theme: ThemeConfig;
@@ -27,8 +28,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-
-  const currentAudioSrc = activeSongUrl && activeSongUrl.trim() ? activeSongUrl : DEFAULT_AUDIO_SRC;
+  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>(DEFAULT_AUDIO_SRC);
 
   // Volume state
   const [volume, setVolume] = useState<number>(() => {
@@ -48,23 +48,53 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // When track source changes, update audio element
+  // Resolve activeSongUrl asynchronously (handles IndexedDB track IDs, data URLs, direct links)
+  useEffect(() => {
+    let isMounted = true;
+    async function resolveSrc() {
+      if (!activeSongUrl || !activeSongUrl.trim()) {
+        if (isMounted) setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+        return;
+      }
+      try {
+        const resolved = await getStoredAudioUrl(activeSongUrl);
+        if (isMounted) {
+          setResolvedAudioSrc(resolved || DEFAULT_AUDIO_SRC);
+        }
+      } catch {
+        if (isMounted) setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+      }
+    }
+    resolveSrc();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSongUrl]);
+
+  // When resolved track source changes, update audio element
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const wasPlaying = isPlaying;
-    audio.src = currentAudioSrc;
+    audio.src = resolvedAudioSrc;
     audio.load();
     setCurrentTime(0);
 
-    if (wasPlaying) {
+    if (isPlaying) {
       audio
         .play()
         .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+        .catch((err) => {
+          console.warn('Playback error on track change:', err);
+          setIsPlaying(false);
+          // If custom track failed, fallback to default
+          if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
+            setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+            showToast('Unable to stream custom track. Playing default 🎵');
+          }
+        });
     }
-  }, [currentAudioSrc]);
+  }, [resolvedAudioSrc]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -90,6 +120,13 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     };
   }, [volume, isMuted]);
 
+  const handleAudioError = () => {
+    if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
+      setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+      showToast('Track URL unreachable. Default track loaded 🎵');
+    }
+  };
+
   const togglePlay = async () => {
     sound.playClick();
     const audio = audioRef.current;
@@ -101,11 +138,29 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       showToast(`Paused ${activeSongTitle}`);
     } else {
       try {
+        if (audio.readyState === 0) {
+          audio.load();
+        }
         await audio.play();
         setIsPlaying(true);
         showToast(`Playing ${activeSongTitle} 🎵`);
-      } catch {
-        showToast('Click again to start audio playback');
+      } catch (err) {
+        console.warn('Playback failed:', err);
+        // Attempt fallback to default audio track if custom track fails
+        if (resolvedAudioSrc !== DEFAULT_AUDIO_SRC) {
+          setResolvedAudioSrc(DEFAULT_AUDIO_SRC);
+          showToast('Custom MP3 link unreachable. Playing default song 🎵');
+          try {
+            audio.src = DEFAULT_AUDIO_SRC;
+            audio.load();
+            await audio.play();
+            setIsPlaying(true);
+          } catch {
+            setIsPlaying(false);
+          }
+        } else {
+          showToast('Click play again to start audio');
+        }
       }
     }
   };
@@ -188,9 +243,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
-        src={currentAudioSrc}
+        src={resolvedAudioSrc}
         loop
         preload="metadata"
+        onError={handleAudioError}
       />
 
       {/* Rotating Vinyl Disc */}
