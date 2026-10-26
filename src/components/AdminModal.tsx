@@ -43,12 +43,14 @@ import {
   auth,
   googleProvider,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   handleFirestoreError,
   OperationType,
 } from '../firebase';
 import { SocialsViewMode, AudioTrack, GlobalSettingsDoc } from '../types';
 import { sound } from '../utils/audio';
+import { uploadAudioChunksToFirestore, storeAudioBlob } from '../utils/audioStorage';
 import {
   uploadTrackToServer,
   fetchServerTracks,
@@ -270,10 +272,34 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       }
     } catch (err: any) {
       console.warn('Google Auth Error:', err);
-      if (err?.code !== 'auth/popup-closed-by-user') {
-        showToast('Google sign-in error');
+      if (err?.code === 'auth/unauthorized-domain') {
+        const domain = window.location.hostname;
+        showToast(`Domain (${domain}) must be authorized in Firebase Console -> Auth -> Settings.`);
+      } else if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/operation-not-supported-in-this-environment') {
+        showToast('Popup blocked by browser. Trying redirect sign-in... 🔄');
+        try {
+          await signInWithRedirect(auth, googleProvider);
+        } catch (redirectErr) {
+          console.warn('Redirect Auth Error:', redirectErr);
+          showToast('Redirect sign-in error.');
+        }
+      } else if (err?.code !== 'auth/popup-closed-by-user') {
+        showToast(`Google Auth Error: ${err?.message || 'Login failed'}`);
       }
     } finally {
+      setIsAuthenticatingGoogle(false);
+    }
+  };
+
+  const handleGoogleRedirectLogin = async () => {
+    setIsAuthenticatingGoogle(true);
+    sound.playClick();
+    try {
+      showToast('Redirecting to Google Auth... 🔄');
+      await signInWithRedirect(auth, googleProvider);
+    } catch (err: any) {
+      console.warn('Redirect Auth Error:', err);
+      showToast(err?.message || 'Redirect login error');
       setIsAuthenticatingGoogle(false);
     }
   };
@@ -390,20 +416,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           return;
         }
 
-        showToast('Uploading track to server... ⏳');
+        showToast('Syncing track cross-device to Cloud... ⏳');
         setUploadProgress({ percent: 0 });
 
-        const serverTrack = await uploadTrackToServer(
-          selectedFile,
-          cleanTitle,
-          cleanArtist,
-          (percent) => {
-            setUploadProgress({ percent });
-          }
-        );
+        // 1. Upload Base64 chunks directly to Firestore so every visitor on any device/URL can stream it
+        await uploadAudioChunksToFirestore(trackId, selectedFile, (percent) => {
+          setUploadProgress({ percent });
+        });
 
-        trackId = serverTrack.id;
-        finalAudioUrl = serverTrack.streamUrl;
+        // 2. Cache in local IndexedDB for instant playback
+        await storeAudioBlob(trackId, selectedFile, cleanTitle, cleanArtist).catch(() => {});
+
+        // 3. Set cross-device firestore stream URL
+        finalAudioUrl = `firestore://${trackId}`;
+
+        // 4. Background upload to local server
+        uploadTrackToServer(selectedFile, cleanTitle, cleanArtist).catch(() => {});
 
         // Sync with Firestore tracks collection for all clients
         await setDoc(doc(db, 'tracks', trackId), {
@@ -641,6 +669,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <span>Sign in with Google</span>
                     </>
                   )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleRedirectLogin}
+                  disabled={isAuthenticatingGoogle}
+                  className="w-full py-2.5 rounded-xl bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 text-purple-200 font-medium text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  <span>Alternative: Full-Page Redirect Sign-In</span>
                 </button>
               </div>
             </div>

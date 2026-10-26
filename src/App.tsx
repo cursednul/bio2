@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, MessageSquare, ShieldCheck, Megaphone, Gamepad2, Plus } from 'lucide-react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { db, auth, signOut, onAuthStateChanged, handleFirestoreError, OperationType } from './firebase';
+import { db, auth, signOut, onAuthStateChanged, getRedirectResult, handleFirestoreError, OperationType } from './firebase';
 import { BackgroundCanvas } from './components/BackgroundCanvas';
 import { ProfileCard } from './components/ProfileCard';
 import { SocialLinks } from './components/SocialLinks';
@@ -146,8 +146,24 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Listen for Google Authentication state
+  // Listen for Google Authentication state & redirect results
   useEffect(() => {
+    getRedirectResult(auth)
+      .then((res) => {
+        if (res?.user?.email && res.user.email.toLowerCase() === 'kirya2010777@gmail.com') {
+          setIsAdmin(true);
+          try {
+            sessionStorage.setItem('cursed_admin_auth', 'true');
+          } catch {
+            // Ignore
+          }
+          setToastMessage('Signed in as Administrator! 🛡️');
+        }
+      })
+      .catch((err) => {
+        console.warn('Redirect Auth Error:', err);
+      });
+
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user?.email && user.email.toLowerCase() === 'kirya2010777@gmail.com') {
         setIsAdmin(true);

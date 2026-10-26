@@ -84,9 +84,8 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         return;
       }
 
-      // Fast-path: Direct HTTP/HTTPS, local /audio/ or /api/ route, blob or data URL
+      // Fast-path: Bundled assets, direct external URLs, or local memory blobs
       if (
-        activeSongUrl.startsWith('/api/') ||
         activeSongUrl.startsWith('/audio/') ||
         activeSongUrl.startsWith('http://') ||
         activeSongUrl.startsWith('https://') ||
@@ -100,17 +99,17 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         return;
       }
 
-      // Legacy fallback: Firestore chunk loader
+      // Universal cross-device resolver (loads Firestore cloud chunks & IndexedDB)
       if (isMounted) setIsLoadingTrack(true);
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
         if (isMounted) {
-          setResolvedAudioSrc(resolved || '/audio/ambient_track.mp3');
+          setResolvedAudioSrc(resolved || activeSongUrl || '/audio/ambient_track.mp3');
           setIsLoadingTrack(false);
         }
       } catch {
         if (isMounted) {
-          setResolvedAudioSrc('/audio/ambient_track.mp3');
+          setResolvedAudioSrc(activeSongUrl || '/audio/ambient_track.mp3');
           setIsLoadingTrack(false);
         }
       }
