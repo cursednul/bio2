@@ -4,6 +4,7 @@ import { ThemeConfig } from '../types';
 interface BackgroundCanvasProps {
   theme: ThemeConfig;
   motionScale: number;
+  lowPowerMode?: boolean;
 }
 
 interface Particle {
@@ -23,9 +24,10 @@ interface Ripple {
   maxRadius: number;
   alpha: number;
   color: string;
+  active: boolean;
 }
 
-export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motionScale }) => {
+export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motionScale, lowPowerMode = false }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mouseRef = useRef({ x: 0, y: 0, targetX: 0, targetY: 0, active: false });
   const ripplesRef = useRef<Ripple[]>([]);
@@ -37,6 +39,13 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
     if (!ctx) return;
 
     let animationFrameId: number;
+    // Initialize ripple pool
+    if (ripplesRef.current.length === 0) {
+      for (let i = 0; i < 10; i++) {
+        ripplesRef.current.push({ x: 0, y: 0, radius: 0, maxRadius: 0, alpha: 0, color: '', active: false });
+      }
+    }
+
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);
 
@@ -56,15 +65,16 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
 
     const handlePointerDown = (e: PointerEvent) => {
       if (motionScale === 0) return;
-      ripplesRef.current.push({
-        x: e.clientX,
-        y: e.clientY,
-        radius: 4,
-        maxRadius: Math.min(width, height) * 0.45,
-        alpha: 0.7,
-        color: theme.primaryLight,
-      });
-      if (ripplesRef.current.length > 5) ripplesRef.current.shift();
+      const ripple = ripplesRef.current.find((r) => !r.active);
+      if (ripple) {
+        ripple.active = true;
+        ripple.x = e.clientX;
+        ripple.y = e.clientY;
+        ripple.radius = 4;
+        ripple.maxRadius = Math.min(width, height) * (lowPowerMode ? 0.25 : 0.45);
+        ripple.alpha = 0.7;
+        ripple.color = theme.primaryLight;
+      }
     };
 
     window.addEventListener('pointermove', handlePointerMove, { passive: true });
@@ -72,7 +82,7 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
 
     // Performance adaptation for Android / Mobile devices
     const isMobile = width < 768;
-    const particleCount = isMobile ? 22 : 45;
+    const particleCount = lowPowerMode ? (isMobile ? 8 : 15) : (isMobile ? 22 : 45);
     const particles: Particle[] = [];
     for (let i = 0; i < particleCount; i++) {
       particles.push({
@@ -87,8 +97,17 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
     }
 
     let time = 0;
+    let lastFrameTime = 0;
+    const frameInterval = lowPowerMode ? 1000 / 30 : 0; // Throttle to 30fps if low power
 
-    const render = () => {
+    const render = (now: number) => {
+      // Frame rate throttling for low power mode
+      if (lowPowerMode && now - lastFrameTime < frameInterval) {
+        animationFrameId = requestAnimationFrame(render);
+        return;
+      }
+      lastFrameTime = now;
+
       time += 0.008 * (motionScale > 0 ? motionScale : 0.05);
 
       // Smooth mouse lerp
@@ -116,59 +135,63 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
       ctx.fillStyle = radialGlow;
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Ambient floating orbs
-      const floatX1 = Math.sin(time * 0.7) * 60 + width * 0.8;
-      const floatY1 = Math.cos(time * 0.6) * 50 + height * 0.2;
-      const orbGrad1 = ctx.createRadialGradient(floatX1, floatY1, 0, floatX1, floatY1, 240);
-      orbGrad1.addColorStop(0, theme.glow);
-      orbGrad1.addColorStop(1, 'transparent');
-      ctx.fillStyle = orbGrad1;
-      ctx.beginPath();
-      ctx.arc(floatX1, floatY1, 240, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 3. Kinetic Flowing Ribbon Waves
-      const waveCount = isMobile ? 3 : 5;
-      const waveOffsets = isMobile ? [0.25, 0.5, 0.75] : [0.18, 0.34, 0.5, 0.66, 0.82];
-      const waveSpeeds = [0.7, -0.5, 0.8, -0.6, 0.9];
-
-      for (let i = 0; i < waveCount; i++) {
-        const baseY = height * waveOffsets[i];
-        const speed = waveSpeeds[i];
-        const waveTime = time * speed;
-
+      // 2. Ambient floating orbs (Reduced in low power)
+      if (!lowPowerMode || !isMobile) {
+        const floatX1 = Math.sin(time * 0.7) * 60 + width * 0.8;
+        const floatY1 = Math.cos(time * 0.6) * 50 + height * 0.2;
+        const orbGrad1 = ctx.createRadialGradient(floatX1, floatY1, 0, floatX1, floatY1, 240);
+        orbGrad1.addColorStop(0, theme.glow);
+        orbGrad1.addColorStop(1, 'transparent');
+        ctx.fillStyle = orbGrad1;
         ctx.beginPath();
-        const startY = baseY + Math.sin(waveTime) * 30;
-        ctx.moveTo(0, startY);
+        ctx.arc(floatX1, floatY1, 240, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-        const segments = isMobile ? 4 : 5;
-        const segmentWidth = width / segments;
+      // 3. Kinetic Flowing Ribbon Waves (Disabled in low power mode for optimization)
+      if (!lowPowerMode) {
+        const waveCount = isMobile ? 3 : 5;
+        const waveOffsets = isMobile ? [0.25, 0.5, 0.75] : [0.18, 0.34, 0.5, 0.66, 0.82];
+        const waveSpeeds = [0.7, -0.5, 0.8, -0.6, 0.9];
 
-        for (let s = 1; s <= segments; s++) {
-          const segX = s * segmentWidth;
-          const prevSegX = (s - 1) * segmentWidth;
-          const midX = (prevSegX + segX) / 2;
+        for (let i = 0; i < waveCount; i++) {
+          const baseY = height * waveOffsets[i];
+          const speed = waveSpeeds[i];
+          const waveTime = time * speed;
 
-          // Mouse warp effect
-          const distToMouse = Math.hypot(midX - mouseRef.current.x, baseY - mouseRef.current.y);
-          const mouseInfluence = Math.max(0, 1 - distToMouse / 450);
-          const warpY = mouseInfluence * (mouseRef.current.y - baseY) * 0.4;
+          ctx.beginPath();
+          const startY = baseY + Math.sin(waveTime) * 30;
+          ctx.moveTo(0, startY);
 
-          const harmonic = Math.sin(waveTime + s * 1.2) * 40 + Math.cos(waveTime * 1.5 + s) * 18;
-          const segY = baseY + harmonic + warpY;
+          const segments = isMobile ? 4 : 5;
+          const segmentWidth = width / segments;
 
-          const cp1x = prevSegX + segmentWidth * 0.5;
-          const cp1y = segY + Math.sin(waveTime + s) * 20;
+          for (let s = 1; s <= segments; s++) {
+            const segX = s * segmentWidth;
+            const prevSegX = (s - 1) * segmentWidth;
+            const midX = (prevSegX + segX) / 2;
 
-          ctx.quadraticCurveTo(cp1x, cp1y, segX, segY);
+            // Mouse warp effect
+            const distToMouse = Math.hypot(midX - mouseRef.current.x, baseY - mouseRef.current.y);
+            const mouseInfluence = Math.max(0, 1 - distToMouse / 450);
+            const warpY = mouseInfluence * (mouseRef.current.y - baseY) * 0.4;
+
+            const harmonic = Math.sin(waveTime + s * 1.2) * 40 + Math.cos(waveTime * 1.5 + s) * 18;
+            const segY = baseY + harmonic + warpY;
+
+            const cp1x = prevSegX + segmentWidth * 0.5;
+            const cp1y = segY + Math.sin(waveTime + s) * 20;
+
+            ctx.quadraticCurveTo(cp1x, cp1y, segX, segY);
+          }
+
+          ctx.strokeStyle = theme.primaryLight;
+          ctx.lineWidth = i === 1 ? 1.6 : 1.1;
+          ctx.globalAlpha = 0.16 + (i % 2 === 0 ? 0.08 : 0);
+          ctx.setLineDash([90 + i * 20, 50 + i * 15]);
+          ctx.lineDashOffset = -time * (35 + i * 15) * (speed > 0 ? 1 : -1);
+          ctx.stroke();
         }
-
-        ctx.strokeStyle = theme.primaryLight;
-        ctx.lineWidth = i === 1 ? 1.6 : 1.1;
-        ctx.globalAlpha = 0.16 + (i % 2 === 0 ? 0.08 : 0);
-        ctx.setLineDash([90 + i * 20, 50 + i * 15]);
-        ctx.lineDashOffset = -time * (35 + i * 15) * (speed > 0 ? 1 : -1);
-        ctx.stroke();
       }
 
       ctx.setLineDash([]);
@@ -191,9 +214,10 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
         ctx.fill();
       });
 
-      // 5. Click Ripples
-      for (let r = ripplesRef.current.length - 1; r >= 0; r--) {
+      // 5. Click Ripples (Pooled)
+      for (let r = 0; r < ripplesRef.current.length; r++) {
         const rip = ripplesRef.current[r];
+        if (!rip.active) continue;
         rip.radius += (rip.maxRadius - rip.radius) * 0.045 + 0.8;
         rip.alpha *= 0.94;
 
@@ -205,7 +229,7 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
         ctx.stroke();
 
         if (rip.alpha < 0.02 || rip.radius >= rip.maxRadius) {
-          ripplesRef.current.splice(r, 1);
+          rip.active = false;
         }
       }
 
@@ -213,7 +237,7 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
       animationFrameId = requestAnimationFrame(render);
     };
 
-    render();
+    animationFrameId = requestAnimationFrame(render);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
@@ -221,7 +245,7 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [theme, motionScale]);
+  }, [theme, motionScale, lowPowerMode]);
 
   return (
     <canvas

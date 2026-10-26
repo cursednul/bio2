@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Layers, MessageSquare, ShieldCheck, Megaphone, Gamepad2, Plus } from 'lucide-react';
+import { Layers, MessageSquare, ShieldCheck, Megaphone, Gamepad2, Plus, ShieldAlert } from 'lucide-react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth, signOut, onAuthStateChanged, getRedirectResult, handleFirestoreError, OperationType } from './firebase';
 import { BackgroundCanvas } from './components/BackgroundCanvas';
@@ -82,6 +82,9 @@ export default function App() {
 
   // Background Motion Engine Preset
   const [motionPreset, setMotionPreset] = useState<'flow' | 'hyper' | 'calm'>('flow');
+  const [lowPowerMode, setLowPowerMode] = useState<boolean>(false);
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
+  const [commentsEnabled, setCommentsEnabled] = useState<boolean>(true);
 
   // Secret 10-Click Admin Trigger on star icon
   const [starClicks, setStarClicks] = useState(0);
@@ -101,6 +104,9 @@ export default function App() {
           if (data.announcement !== undefined) setAnnouncement(data.announcement);
           if (data.announcementActive !== undefined) setAnnouncementActive(data.announcementActive);
           if (data.motionPreset) setMotionPreset(data.motionPreset);
+          if (data.lowPowerMode !== undefined) setLowPowerMode(data.lowPowerMode);
+          if (data.maintenanceMode !== undefined) setMaintenanceMode(data.maintenanceMode);
+          if (data.commentsEnabled !== undefined) setCommentsEnabled(data.commentsEnabled);
           if (data.nickname) setNickname(data.nickname);
           if (data.bioEmoticon) setBioEmoticon(data.bioEmoticon);
           if (data.avatarUrl !== undefined) setAvatarUrl(data.avatarUrl);
@@ -118,6 +124,9 @@ export default function App() {
               announcement: 'Welcome to cursed · Connect on Telegram, TikTok & Discord',
               announcementActive: false,
               motionPreset: 'flow',
+              lowPowerMode: false,
+              maintenanceMode: false,
+              commentsEnabled: true,
               nickname: 'cursed',
               bioEmoticon: '(˶>⩊<˶)',
               avatarUrl: '',
@@ -171,7 +180,8 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const motionScale = motionPreset === 'calm' ? 0.4 : motionPreset === 'hyper' ? 1.6 : 1.0;
+  let motionScale = motionPreset === 'calm' ? 0.4 : motionPreset === 'hyper' ? 1.6 : 1.0;
+  if (lowPowerMode) motionScale *= 0.5; // Throttle motion in low power mode
 
   const handleStarClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -317,8 +327,19 @@ export default function App() {
       {/* Toast Notification */}
       <Toast message={toastMessage} />
 
+      {/* Maintenance Overlay */}
+      {maintenanceMode && !isAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md p-6 text-center">
+          <div className="max-w-md space-y-4">
+            <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto" />
+            <h2 className="text-2xl font-bold text-white">Under Maintenance</h2>
+            <p className="text-zinc-400 text-sm">We are currently performing some updates to improve your experience. Please check back soon!</p>
+          </div>
+        </div>
+      )}
+
       {/* Interactive Background Kinetic Canvas */}
-      <BackgroundCanvas theme={theme} motionScale={motionScale} />
+      <BackgroundCanvas theme={theme} motionScale={motionScale} lowPowerMode={lowPowerMode} />
 
       {/* Admin Live Announcement Banner */}
       {announcementActive && announcement.trim() && (
@@ -431,6 +452,7 @@ export default function App() {
           nickname={nickname}
           bioEmoticon={bioEmoticon}
           avatarUrl={avatarUrl}
+          lowPowerMode={lowPowerMode}
         />
 
         {/* Dynamic Tab Body */}
@@ -454,7 +476,7 @@ export default function App() {
               </motion.div>
             )}
 
-            {activeTab === 'comments' && (
+            {activeTab === 'comments' && commentsEnabled && (
               <motion.div
                 key={`comments-${commentResetKey}`}
                 initial={{ opacity: 0, y: 15 }}
@@ -470,6 +492,13 @@ export default function App() {
                 />
               </motion.div>
             )}
+
+            {activeTab === 'comments' && !commentsEnabled && (
+              <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-zinc-500 text-sm">
+                Comments are currently disabled.
+              </div>
+            )}
+
           </AnimatePresence>
         </div>
       </main>
@@ -528,6 +557,12 @@ export default function App() {
         commentCount={0}
         onExportComments={handleExportComments}
         showToast={showToast}
+        lowPowerMode={lowPowerMode}
+        onSetLowPowerMode={setLowPowerMode}
+        maintenanceMode={maintenanceMode}
+        onSetMaintenanceMode={setMaintenanceMode}
+        commentsEnabled={commentsEnabled}
+        onSetCommentsEnabled={setCommentsEnabled}
       />
     </div>
   );

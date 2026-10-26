@@ -267,7 +267,7 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
       {/* Leave a Comment Form */}
       <form
         onSubmit={handleSubmit}
-        className="p-4 sm:p-5 rounded-3xl bg-white/[0.04] border border-white/10 backdrop-blur-xl shadow-xl mb-6 touch-manipulation"
+        className="p-3 sm:p-5 rounded-3xl bg-white/[0.04] border border-white/10 backdrop-blur-xl shadow-xl mb-6 touch-manipulation"
       >
         <div className="flex items-center gap-2 mb-3">
           <MessageSquare className="w-4 h-4 text-purple-400" />

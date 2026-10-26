@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus, Youtube } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
-import { getStoredAudioUrl } from '../utils/audioStorage';
+import { getStoredAudioUrl, validateAudioUrl } from '../utils/audioStorage';
 import { extractYouTubeVideoId } from '../utils/youtubeService';
 
 interface AudioPlayerBarProps {
@@ -35,6 +35,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>('');
   const [ytVideoId, setYtVideoId] = useState<string | null>(null);
   const [isLoadingTrack, setIsLoadingTrack] = useState<boolean>(false);
+  const [isAudioUnavailable, setIsAudioUnavailable] = useState<boolean>(false);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 
   // Volume state
@@ -112,13 +113,24 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       if (isMounted) setIsLoadingTrack(true);
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
-        if (isMounted) {
-          setResolvedAudioSrc(resolved || (activeSongUrl && !activeSongUrl.startsWith('firestore://') ? activeSongUrl : ''));
-          setIsLoadingTrack(false);
+        if (resolved) {
+          const isValid = await validateAudioUrl(resolved);
+          if (isMounted) {
+            setResolvedAudioSrc(isValid ? resolved : '');
+            setIsAudioUnavailable(!isValid);
+            setIsLoadingTrack(false);
+          }
+        } else {
+          if (isMounted) {
+            setResolvedAudioSrc('');
+            setIsAudioUnavailable(true);
+            setIsLoadingTrack(false);
+          }
         }
       } catch {
         if (isMounted) {
-          setResolvedAudioSrc(activeSongUrl && !activeSongUrl.startsWith('firestore://') ? activeSongUrl : '');
+          setResolvedAudioSrc('');
+          setIsAudioUnavailable(true);
           setIsLoadingTrack(false);
         }
       }
@@ -326,8 +338,34 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const handleAudioError = () => {
     const audio = audioRef.current;
     if (audio?.error) {
-      console.warn('Audio media error encountered:', audio.error.message || audio.error.code);
+      const code = audio.error.code;
+      const msg = audio.error.message || '';
+      console.warn(`Audio media error encountered: ${code} ${msg}`);
+      
       setIsPlaying(false);
+      
+      // Handle specific error cases
+      if (code === 4) { // MEDIA_ELEMENT_ERROR: Format error / Source not supported
+        if (activeSongUrl?.startsWith('firestore://')) {
+          showToast('Audio format error. Re-syncing track... 🔄');
+          // Trigger a re-resolve by clearing and re-setting the src
+          setResolvedAudioSrc('');
+          setTimeout(() => {
+            const extractedId = activeSongUrl.replace('firestore://', '');
+            getStoredAudioUrl(extractedId).then(url => {
+              if (url) setResolvedAudioSrc(url);
+            });
+          }, 1000);
+        } else {
+          showToast('Audio format not supported by this browser.');
+        }
+      } else if (code === 3) { // Decode error
+        showToast('Error decoding audio track.');
+      } else if (code === 2) { // Network error
+        showToast('Network error while loading audio.');
+      } else {
+        showToast('Unable to load audio track.');
+      }
     }
   };
 
@@ -531,62 +569,63 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       </motion.div>
 
       {/* Track Details & Scrubber */}
-      <div className="flex-1 min-w-0 pr-0.5">
-        <div className="flex items-center justify-between gap-1 mb-1">
-          <div className="flex items-center gap-1.5 truncate">
-            <span
-              className="font-semibold text-zinc-100 text-[11px] sm:text-xs truncate max-w-[110px] xs:max-w-[160px] sm:max-w-[210px]"
-              title={displayTitle}
-            >
-              {displayTitle}
-            </span>
-            {displayArtist && (
-              <span className="text-[10px] text-zinc-400 truncate hidden xs:inline sm:inline">
-                · {displayArtist}
+      {isAudioUnavailable ? (
+        <div className="flex-1 text-xs text-rose-400 font-mono text-center truncate">Track Unavailable</div>
+      ) : (
+        <div className="flex-1 min-w-0 pr-0.5">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <div className="flex items-center gap-1.5 truncate">
+              <span
+                className="font-semibold text-zinc-100 text-[11px] sm:text-xs truncate max-w-[110px] xs:max-w-[160px] sm:max-w-[210px]"
+                title={displayTitle}
+              >
+                {displayTitle}
               </span>
-            )}
-            {isPlaying && !isMuted && volume > 0 && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            )}
+              {displayArtist && (
+                <span className="text-[10px] text-zinc-400 truncate hidden xs:inline sm:inline">
+                  · {displayArtist}
+                </span>
+              )}
+              {isPlaying && !isMuted && volume > 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              )}
+            </div>
+
+            <span className="text-[10px] font-mono text-zinc-400 shrink-0 tabular-nums">
+              {formatTime(currentTime)} / {formatTime(duration || 0)}
+            </span>
           </div>
 
-          <span className="text-[10px] font-mono text-zinc-400 shrink-0 tabular-nums">
-            {formatTime(currentTime)} / {formatTime(duration || 0)}
-          </span>
-        </div>
-
-        {/* Progress Bar with buffer track and seek input */}
-        <div className="relative flex items-center w-full h-5 cursor-pointer">
-          {/* Buffer visualizer */}
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 w-full bg-white/15 rounded-full overflow-hidden pointer-events-none">
-            <div
-              className="h-full bg-white/20 transition-all duration-300"
-              style={{ width: `${bufferedPercent}%` }}
-            />
-            <div
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-purple-500 to-indigo-400"
-              style={{ width: `${progressPercent}%` }}
+          {/* Progress Bar with buffer track and seek input */}
+          <div className="relative flex items-center w-full h-5 cursor-pointer">
+            {/* Buffer visualizer */}
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 w-full bg-white/15 rounded-full overflow-hidden pointer-events-none">
+              <div
+                className="h-full bg-white/20 transition-all duration-300"
+                style={{ width: `${bufferedPercent}%` }}
+              />
+              <div
+                className="absolute left-0 top-0 h-full bg-gradient-to-r from-purple-500 to-indigo-400"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              step="0.1"
+              value={currentTime}
+              onMouseDown={handleScrubStart}
+              onTouchStart={handleScrubStart}
+              onChange={handleScrubChange}
+              onMouseUp={handleScrubEnd}
+              onTouchEnd={handleScrubEnd}
+              className="w-full h-6 opacity-0 cursor-pointer touch-none focus:outline-none focus:ring-0 z-10"
+              aria-label="Seek track position"
             />
           </div>
-
-
-
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            step="0.1"
-            value={currentTime}
-            onMouseDown={handleScrubStart}
-            onTouchStart={handleScrubStart}
-            onChange={handleScrubChange}
-            onMouseUp={handleScrubEnd}
-            onTouchEnd={handleScrubEnd}
-            className="w-full h-6 opacity-0 cursor-pointer touch-none focus:outline-none focus:ring-0 z-10"
-            aria-label="Seek track position"
-          />
         </div>
-      </div>
+      )}
 
       {/* Upload / Switch Song button if provided (Admin only) */}
       {onOpenUpload && (
@@ -641,7 +680,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full right-0 mb-3 px-3 py-2.5 rounded-2xl bg-zinc-950/95 border border-purple-500/30 backdrop-blur-2xl shadow-2xl flex items-center gap-2.5 z-50 text-xs min-w-[170px]"
+              className="absolute bottom-full right-[-10px] sm:right-0 mb-3 px-3 py-2.5 rounded-2xl bg-zinc-950/95 border border-purple-500/30 backdrop-blur-2xl shadow-2xl flex items-center gap-2.5 z-50 text-xs min-w-[170px]"
             >
               <button
                 onClick={toggleMute}

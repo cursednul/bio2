@@ -28,6 +28,7 @@ import {
   Check,
   Youtube,
   Search,
+  MessageSquare,
 } from 'lucide-react';
 import {
   doc,
@@ -52,7 +53,7 @@ import {
 } from '../firebase';
 import { SocialsViewMode, AudioTrack, GlobalSettingsDoc } from '../types';
 import { sound } from '../utils/audio';
-import { uploadAudioChunksToFirestore, storeAudioBlob } from '../utils/audioStorage';
+import { uploadAudioChunksToFirestore, storeAudioBlob, getStoredAudioUrl, validateAudioUrl } from '../utils/audioStorage';
 import {
   uploadTrackToServer,
   fetchServerTracks,
@@ -67,7 +68,7 @@ import {
   extractYouTubeVideoId,
 } from '../utils/youtubeService';
 
-export type AdminTab = 'general' | 'audio' | 'profile' | 'broadcast' | 'moderation';
+export type AdminTab = 'general' | 'audio' | 'profile' | 'broadcast' | 'moderation' | 'system';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -98,6 +99,12 @@ interface AdminModalProps {
   activeSongArtist: string;
   activeSongUrl: string;
   onSetActiveSong: (title: string, artist: string, url: string) => void;
+  lowPowerMode: boolean;
+  onSetLowPowerMode: (active: boolean) => void;
+  maintenanceMode: boolean;
+  onSetMaintenanceMode: (active: boolean) => void;
+  commentsEnabled: boolean;
+  onSetCommentsEnabled: (active: boolean) => void;
   onClearAllComments: () => void;
   commentCount: number;
   onExportComments: () => void;
@@ -138,6 +145,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   commentCount,
   onExportComments,
   showToast,
+  lowPowerMode,
+  onSetLowPowerMode,
+  maintenanceMode,
+  onSetMaintenanceMode,
+  commentsEnabled,
+  onSetCommentsEnabled,
 }) => {
   const [isAuthenticatingGoogle, setIsAuthenticatingGoogle] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
@@ -273,9 +286,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  // Sync draft states and initialTab when modal opens
+  // Sync draft states only when modal opens
+  const lastIsOpen = useRef(isOpen);
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !lastIsOpen.current) {
       if (initialTab) setActiveTab(initialTab);
       setGameDraft(favGame);
       setSongDraft(favSong);
@@ -287,12 +301,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       if (ytResults.length === 0) {
         handleSearchYt();
       }
-    } else {
+    } else if (!isOpen && lastIsOpen.current) {
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
       }
       setPreviewTrackId(null);
     }
+    lastIsOpen.current = isOpen;
   }, [isOpen, initialTab, favGame, favSong, announcement, announcementActive, nickname, bioEmoticon, avatarUrl]);
 
   // Load Tracks from both Server Catalog and Firestore
@@ -456,6 +471,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     await saveGlobalSettingsToFirestore({ motionPreset: preset });
   };
 
+  const handleToggleLowPower = async (active: boolean) => {
+    onSetLowPowerMode(active);
+    await saveGlobalSettingsToFirestore({ lowPowerMode: active });
+  };
+
   const handleSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     sound.playClick();
@@ -481,15 +501,18 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     const cleanNick = nicknameDraft.trim() || 'cursed';
     const cleanBio = bioDraft.trim() || '(˶>⩊<˶)';
     const cleanAvatar = avatarDraft.trim();
+    const cleanGame = gameDraft.trim() || 'Watch Dogs 2';
 
     onSetNickname(cleanNick);
     onSetBioEmoticon(cleanBio);
     onSetAvatarUrl(cleanAvatar);
+    onSetFavGame(cleanGame);
 
     await saveGlobalSettingsToFirestore({
       nickname: cleanNick,
       bioEmoticon: cleanBio,
       avatarUrl: cleanAvatar,
+      favGame: cleanGame,
     });
   };
 
@@ -638,7 +661,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     showToast(`Broadcasted: ${track.title} 🎵`);
   };
 
-  const handlePreviewTrack = (track: AudioTrack) => {
+  const handlePreviewTrack = async (track: AudioTrack) => {
     sound.playClick();
     const audio = previewAudioRef.current;
     if (!audio) return;
@@ -647,14 +670,27 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       audio.pause();
       setPreviewTrackId(null);
     } else {
-      audio.src = track.audioUrl;
-      audio.currentTime = 0;
-      audio.play().then(() => {
+      try {
+        let finalUrl = track.audioUrl;
+        if (finalUrl.startsWith('firestore://')) {
+          const resolved = await getStoredAudioUrl(finalUrl.replace('firestore://', ''));
+          if (resolved) finalUrl = resolved;
+        }
+        
+        const isValid = await validateAudioUrl(finalUrl);
+        if (!isValid) {
+          showToast('Track incompatible or unreachable');
+          return;
+        }
+        
+        audio.src = finalUrl;
+        audio.currentTime = 0;
+        await audio.play();
         setPreviewTrackId(track.id);
-      }).catch((err) => {
+      } catch (err) {
         console.warn('Preview playback error:', err);
-        showToast('Could not preview audio');
-      });
+        showToast('Could not preview audio: Format error');
+      }
     }
   };
 
@@ -825,6 +861,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   { id: 'profile', label: 'Profile' },
                   { id: 'broadcast', label: 'Banner' },
                   { id: 'moderation', label: 'Mod' },
+                  { id: 'system', label: 'System' },
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -920,6 +957,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       ].map((preset) => (
                         <button
                           key={preset.id}
+                          type="button"
                           onClick={() => handleSaveMotion(preset.id as 'flow' | 'hyper' | 'calm')}
                           className={`py-1.5 rounded-lg border transition-all text-center cursor-pointer ${
                             motionPreset === preset.id
@@ -931,6 +969,33 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Low Power Mode */}
+                  <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-amber-400" />
+                        <span>Low Power Mode (Mobile)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleLowPower(!lowPowerMode)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          lowPowerMode ? 'bg-amber-500' : 'bg-zinc-700'
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            lowPowerMode ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Reduces background animation frame rate and disables heavy kinetic ribbons to save battery on phone devices.
+                    </p>
                   </div>
                 </div>
               )}
@@ -1404,7 +1469,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         value={gameDraft}
                         onChange={(e) => {
                           setGameDraft(e.target.value);
-                          onSetFavGame(e.target.value);
                         }}
                         placeholder="e.g. Watch Dogs 2"
                         maxLength={64}
@@ -1534,6 +1598,54 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* TAB 7: System Settings */}
+              {activeTab === 'system' && (
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-rose-400" />
+                        <span>Maintenance Mode</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => saveGlobalSettingsToFirestore({ maintenanceMode: !maintenanceMode }).then(() => onSetMaintenanceMode(!maintenanceMode))}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          maintenanceMode ? 'bg-rose-500' : 'bg-zinc-700'
+                        }`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${maintenanceMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Enable maintenance mode to show a full-screen message to all visitors.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                        <MessageSquare className="w-4 h-4 text-emerald-400" />
+                        <span>Comments Enabled</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => saveGlobalSettingsToFirestore({ commentsEnabled: !commentsEnabled }).then(() => onSetCommentsEnabled(!commentsEnabled))}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          commentsEnabled ? 'bg-emerald-500' : 'bg-zinc-700'
+                        }`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${commentsEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Global toggle to enable or disable the comments section.
+                    </p>
+                  </div>
+                </div>
+              )}
+
 
               {/* Log Out Button */}
               <div className="pt-2 border-t border-white/10 flex justify-between items-center text-xs">

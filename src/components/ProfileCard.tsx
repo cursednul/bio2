@@ -13,6 +13,7 @@ interface ProfileCardProps {
   nickname?: string;
   bioEmoticon?: string;
   avatarUrl?: string;
+  lowPowerMode?: boolean;
 }
 
 const DEFAULT_AVATAR = 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcTSW4n6wBabxHT5KCZgbMQ84MXD3KQ1JESGSzBWthTMzRN_SiO2';
@@ -26,6 +27,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
   nickname = 'cursed',
   bioEmoticon = '(˶>⩊<˶)',
   avatarUrl,
+  lowPowerMode = false,
 }) => {
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -35,10 +37,28 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50 });
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+    if (!cardRef.current || lowPowerMode) return;
     const rect = cardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    const rotateX = ((y - centerY) / centerY) * -10;
+    const rotateY = ((x - centerX) / centerX) * 10;
+
+    const glareX = (x / rect.width) * 100;
+    const glareY = (y / rect.height) * 100;
+
+    setTilt({ x: rotateX, y: rotateY, glareX, glareY });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!cardRef.current || lowPowerMode) return;
+    const touch = e.touches[0];
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
@@ -76,7 +96,9 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
       <motion.div
         ref={cardRef}
         onMouseMove={handleMouseMove}
+        onTouchMove={handleTouchMove}
         onMouseEnter={() => setIsHovered(true)}
+        onTouchStart={() => setIsHovered(true)}
         onMouseLeave={handleResetTilt}
         onTouchEnd={handleResetTilt}
         animate={{
@@ -88,16 +110,18 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
         style={{
           transformStyle: 'preserve-3d',
         }}
-        className="relative w-full rounded-3xl p-6 sm:p-8 border border-white/10 backdrop-blur-xl shadow-2xl transition-shadow duration-300 touch-manipulation"
+        className="relative w-full rounded-3xl p-4 sm:p-8 border border-white/10 backdrop-blur-xl shadow-2xl transition-shadow duration-300 touch-manipulation"
       >
-        {/* Dynamic Specular Glare Layer */}
-        <div
-          className="pointer-events-none absolute inset-0 rounded-3xl transition-opacity duration-300 z-10"
-          style={{
-            opacity: isHovered ? 0.6 : 0.2,
-            background: `radial-gradient(circle at ${tilt.glareX}% ${tilt.glareY}%, rgba(255,255,255,0.18) 0%, transparent 60%)`,
-          }}
-        />
+        {/* Dynamic Specular Glare Layer (Disabled in low power) */}
+        {!lowPowerMode && (
+          <div
+            className="pointer-events-none absolute inset-0 rounded-3xl transition-opacity duration-300 z-10"
+            style={{
+              opacity: isHovered ? 0.6 : 0.2,
+              background: `radial-gradient(circle at ${tilt.glareX}% ${tilt.glareY}%, rgba(255,255,255,0.18) 0%, transparent 60%)`,
+            }}
+          />
+        )}
 
         {/* Ambient Card Background Glow */}
         <div
@@ -113,32 +137,34 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
               onClick={onShare}
               title="Share Profile"
               aria-label="Share Profile"
-              className="p-2.5 min-w-[44px] min-h-[44px] rounded-xl bg-white/5 active:bg-white/15 hover:bg-white/10 text-zinc-300 hover:text-white transition-colors flex items-center justify-center cursor-pointer"
+              className="p-2 min-w-[36px] min-h-[36px] rounded-xl bg-white/5 active:bg-white/15 hover:bg-white/10 text-zinc-300 hover:text-white transition-colors flex items-center justify-center cursor-pointer"
             >
               <Share2 className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Avatar with Smooth Hologram Glow Aura */}
-          <div className="relative my-1 sm:my-2">
-            <motion.div
-              animate={{
-                scale: [1, 1.14, 1],
-                opacity: [0.35, 0.65, 0.35],
-              }}
-              transition={{
-                duration: 3,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-              className="absolute -inset-3 rounded-full blur-md pointer-events-none"
-              style={{ background: theme.glow }}
-            />
+          {/* Avatar with Smooth Hologram Glow Aura (Pulse disabled in low power) */}
+          <div className="relative my-0.5 sm:my-2">
+            {!lowPowerMode && (
+              <motion.div
+                animate={{
+                  scale: [1, 1.14, 1],
+                  opacity: [0.35, 0.65, 0.35],
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+                className="absolute -inset-3 rounded-full blur-md pointer-events-none"
+                style={{ background: theme.glow }}
+              />
+            )}
 
             <motion.div
-              whileHover={{ scale: 1.06, rotate: -2 }}
+              whileHover={lowPowerMode ? {} : { scale: 1.06, rotate: -2 }}
               whileTap={{ scale: 0.96 }}
-              className="relative w-22 h-22 sm:w-28 sm:h-28 rounded-full overflow-hidden p-[3px] shadow-lg group select-none"
+              className="relative w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden p-[2px] shadow-lg group select-none"
               style={{
                 background: `linear-gradient(135deg, ${theme.primaryLight}, #ffffff, ${theme.primary})`,
               }}
@@ -155,7 +181,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
           </div>
 
           {/* Name with Kinetic Shimmer & Hover/Tap Letter Bounce */}
-          <div className="mt-3 select-none">
+          <div className="mt-2 sm:mt-3 select-none">
             <h1
               className="text-3xl sm:text-4xl font-extrabold tracking-wide flex items-center justify-center cursor-default"
               style={{
@@ -165,7 +191,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
               {titleLetters.map((char, idx) => (
                 <motion.span
                   key={idx}
-                  whileHover={{
+                  whileHover={lowPowerMode ? {} : {
                     y: -5,
                     scale: 1.25,
                     color: theme.primaryLight,
@@ -178,6 +204,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
                   }}
                   className="inline-block transition-colors px-0.5"
                   style={{
+                    touchAction: 'none',
                     backgroundImage: `linear-gradient(115deg, #ffffff 0%, ${theme.primaryLight} 45%, #ffffff 80%, ${theme.primary} 100%)`,
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',

@@ -51,6 +51,9 @@ export interface GlobalSettingsDoc {
   announcement: string;
   announcementActive: boolean;
   motionPreset: 'flow' | 'hyper' | 'calm';
+  lowPowerMode?: boolean;
+  maintenanceMode?: boolean;
+  commentsEnabled?: boolean;
   bioEmoticon?: string;
   nickname?: string;
   avatarUrl?: string;
@@ -86,6 +89,9 @@ export interface AdminSettings {
   announcement: string;
   announcementActive: boolean;
   motionPreset: 'flow' | 'hyper' | 'calm';
+  lowPowerMode?: boolean;
+  maintenanceMode?: boolean;
+  commentsEnabled?: boolean;
   bioEmoticon?: string;
   nickname?: string;
   avatarUrl?: string;

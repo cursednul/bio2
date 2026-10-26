@@ -18,13 +18,16 @@ service cloud.firestore {
     }
 
     function isValidGlobalSettings(data) {
-      return data.keys().hasOnly(['socialsViewMode', 'favGame', 'favSong', 'announcement', 'announcementActive', 'motionPreset', 'bioEmoticon', 'nickname', 'avatarUrl', 'activeSongId', 'activeSongTitle', 'activeSongArtist', 'activeSongUrl', 'updatedAt']) &&
+      return data.keys().hasOnly(['socialsViewMode', 'favGame', 'favSong', 'announcement', 'announcementActive', 'motionPreset', 'lowPowerMode', 'maintenanceMode', 'commentsEnabled', 'bioEmoticon', 'nickname', 'avatarUrl', 'activeSongId', 'activeSongTitle', 'activeSongArtist', 'activeSongUrl', 'updatedAt']) &&
              (!('socialsViewMode' in data) || data.socialsViewMode in ['cards', 'dock', 'grid']) &&
              (!('favGame' in data) || (data.favGame is string && data.favGame.size() <= 64)) &&
              (!('favSong' in data) || (data.favSong is string && data.favSong.size() <= 64)) &&
              (!('announcement' in data) || (data.announcement is string && data.announcement.size() <= 200)) &&
              (!('announcementActive' in data) || data.announcementActive is bool) &&
              (!('motionPreset' in data) || data.motionPreset in ['flow', 'hyper', 'calm']) &&
+             (!('lowPowerMode' in data) || data.lowPowerMode is bool) &&
+             (!('maintenanceMode' in data) || data.maintenanceMode is bool) &&
+             (!('commentsEnabled' in data) || data.commentsEnabled is bool) &&
              (!('bioEmoticon' in data) || (data.bioEmoticon is string && data.bioEmoticon.size() <= 32)) &&
              (!('nickname' in data) || (data.nickname is string && data.nickname.size() <= 32)) &&
              (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512)) &&

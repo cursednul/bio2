@@ -290,3 +290,26 @@ export async function calculateAudioDuration(file: File): Promise<number> {
     };
   });
 }
+
+// Validates if an audio URL is reachable and compatible
+export async function validateAudioUrl(url: string): Promise<boolean> {
+  if (!url) return false;
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      resolve(true);
+      audio.src = ''; // Release resource
+    };
+    audio.onerror = () => {
+      resolve(false);
+      audio.src = ''; // Release resource
+    };
+    audio.src = url;
+    // Timeout in case the audio doesn't respond
+    setTimeout(() => {
+      audio.src = '';
+      resolve(false);
+    }, 3000);
+  });
+}
