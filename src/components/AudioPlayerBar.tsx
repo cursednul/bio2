@@ -188,12 +188,16 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('loadeddata', updateDuration);
+    audio.addEventListener('durationchange', updateDuration);
     audio.addEventListener('progress', updateProgress);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('loadeddata', updateDuration);
+      audio.removeEventListener('durationchange', updateDuration);
       audio.removeEventListener('progress', updateProgress);
       audio.removeEventListener('ended', handleEnded);
     };

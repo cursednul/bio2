@@ -496,14 +496,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
     setPreviewTrackId(null);
 
-    onSetActiveSong(track.title, track.artist, track.audioUrl);
+    // Ensure audioUrl is cross-device compatible across real web domains
+    let targetUrl = track.audioUrl;
+    if (targetUrl.includes('/api/tracks/')) {
+      const match = targetUrl.match(/(track_[a-zA-Z0-9_]+)/);
+      if (match) {
+        targetUrl = `firestore://${match[1]}`;
+      }
+    }
+
+    onSetActiveSong(track.title, track.artist, targetUrl);
     onSetFavSong(track.title);
 
     await saveGlobalSettingsToFirestore({
       activeSongId: track.id,
       activeSongTitle: track.title.slice(0, 100),
       activeSongArtist: track.artist.slice(0, 100),
-      activeSongUrl: track.audioUrl,
+      activeSongUrl: targetUrl,
       favSong: track.title.slice(0, 64),
     });
 

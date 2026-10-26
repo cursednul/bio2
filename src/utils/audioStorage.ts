@@ -119,27 +119,28 @@ export async function uploadAudioChunksToFirestore(
 // Fetches audio chunks from Firestore and reconstructs Blob on any device (phone, laptop, visitor)
 export async function fetchAudioChunksFromFirestore(trackId: string): Promise<Blob | string | null> {
   try {
-    // 1. Fetch chunks collection without requiring composite index ordering
+    // 1. Check if parent track document has direct audioUrl or Base64 data
+    try {
+      const trackSnap = await getDoc(doc(db, 'tracks', trackId));
+      if (trackSnap.exists()) {
+        const d = trackSnap.data();
+        if (
+          d?.audioUrl &&
+          (d.audioUrl.startsWith('data:') ||
+            d.audioUrl.startsWith('http://') ||
+            d.audioUrl.startsWith('https://') ||
+            d.audioUrl.startsWith('blob:'))
+        ) {
+          return d.audioUrl;
+        }
+      }
+    } catch {
+      // Ignore doc lookup
+    }
+
+    // 2. Fetch chunks collection without requiring composite index ordering
     const snapshot = await getDocs(collection(db, 'tracks', trackId, 'chunks'));
     if (snapshot.empty) {
-      // Check if parent track document has direct audioUrl or Base64 data
-      try {
-        const trackSnap = await getDoc(doc(db, 'tracks', trackId));
-        if (trackSnap.exists()) {
-          const d = trackSnap.data();
-          if (
-            d?.audioUrl &&
-            (d.audioUrl.startsWith('http://') ||
-              d.audioUrl.startsWith('https://') ||
-              d.audioUrl.startsWith('data:') ||
-              d.audioUrl.startsWith('blob:'))
-          ) {
-            return d.audioUrl;
-          }
-        }
-      } catch {
-        // Ignore doc lookup
-      }
       return null;
     }
 
@@ -160,8 +161,13 @@ export async function fetchAudioChunksFromFirestore(trackId: string): Promise<Bl
     const fullBase64 = parts.join('');
     if (!fullBase64) return null;
 
+    // Sanitize Base64 string before decoding
+    const cleanBase64 = fullBase64
+      .replace(/^data:audio\/[a-zA-Z0-9+\-]+;base64,/, '')
+      .replace(/\s/g, '');
+
     // Convert Base64 string to Blob safely in chunks without stack overflow
-    const byteCharacters = atob(fullBase64);
+    const byteCharacters = atob(cleanBase64);
     const sliceSize = 1024 * 16;
     const byteArrays: BlobPart[] = [];
 
@@ -195,21 +201,21 @@ export async function getStoredAudioUrl(idOrUrl: string): Promise<string | null>
   if (!idOrUrl || !idOrUrl.trim()) return null;
   const clean = idOrUrl.trim();
 
-  // If it's a blob URL, data URL, or http/https URL, return as-is
+  // If it's a blob URL, data URL, or external http/https URL (that isn't a server local stream path), return as-is
   if (
     clean.startsWith('blob:') ||
     clean.startsWith('data:') ||
-    clean.startsWith('http://') ||
-    clean.startsWith('https://')
+    (clean.startsWith('http') && !clean.includes('/api/tracks/'))
   ) {
     return clean;
   }
 
-  // Extract clean track ID
+  // Extract clean track ID from string (handles firestore://, /api/tracks/track_xxx/stream, or raw track_xxx)
   const isFirestore = clean.startsWith('firestore://');
-  const trackId = clean.replace(/^firestore:\/\//, '');
+  const trackIdMatch = clean.match(/(track_[a-zA-Z0-9_]+)/);
+  const trackId = trackIdMatch ? trackIdMatch[1] : clean.replace(/^firestore:\/\//, '');
 
-  if (isFirestore || trackId.startsWith('track_')) {
+  if (isFirestore || (trackId && trackId.startsWith('track_'))) {
     // 1. Check local IndexedDB cache first
     try {
       const database = await openDB();
@@ -242,6 +248,11 @@ export async function getStoredAudioUrl(idOrUrl: string): Promise<string | null>
     } catch {
       // Ignore
     }
+  }
+
+  // Fallback for valid direct paths or external links
+  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('/')) {
+    return clean;
   }
 
   return null;
