@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus } from 'lucide-react';
+import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus, Youtube } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
 import { getStoredAudioUrl } from '../utils/audioStorage';
+import { extractYouTubeVideoId } from '../utils/youtubeService';
 
 interface AudioPlayerBarProps {
   theme: ThemeConfig;
@@ -23,11 +24,16 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   onOpenUpload,
 }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ytContainerRef = useRef<HTMLDivElement | null>(null);
+  const ytPlayerRef = useRef<any>(null);
+  const ytIntervalRef = useRef<any>(null);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [bufferedTime, setBufferedTime] = useState(0);
   const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>('');
+  const [ytVideoId, setYtVideoId] = useState<string | null>(null);
   const [isLoadingTrack, setIsLoadingTrack] = useState<boolean>(false);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 
@@ -48,8 +54,13 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const fallbackAttemptedRef = useRef(false);
   const volumeContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Detect YouTube video ID if URL is a YouTube Music link or youtube:// ID
+  useEffect(() => {
+    const extractedId = extractYouTubeVideoId(activeSongUrl || '');
+    setYtVideoId(extractedId);
+  }, [activeSongUrl]);
 
   // Close floating volume slider when tapping/clicking outside
   useEffect(() => {
@@ -70,13 +81,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     };
   }, [showVolumeSlider]);
 
-  // Resolve activeSongUrl (handles direct server streams, local /audio/ assets, external URLs, and legacy chunk references)
+  // Resolve activeSongUrl for non-YouTube tracks
   useEffect(() => {
     let isMounted = true;
-    fallbackAttemptedRef.current = false;
 
     async function resolveSrc() {
-      if (!activeSongUrl || !activeSongUrl.trim()) {
+      if (!activeSongUrl || !activeSongUrl.trim() || extractYouTubeVideoId(activeSongUrl)) {
         if (isMounted) {
           setResolvedAudioSrc('');
           setIsLoadingTrack(false);
@@ -84,7 +94,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         return;
       }
 
-      // Fast-path: Bundled assets, direct external URLs, or local memory blobs
+      // Fast-path: Direct external URLs or local memory blobs
       if (
         activeSongUrl.startsWith('http://') ||
         activeSongUrl.startsWith('https://') ||
@@ -98,7 +108,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         return;
       }
 
-      // Universal cross-device resolver (loads Firestore cloud chunks & IndexedDB)
+      // Universal cross-device resolver
       if (isMounted) setIsLoadingTrack(true);
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
@@ -120,8 +130,117 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     };
   }, [activeSongUrl]);
 
-  // When resolved track source changes, update audio element
+  // Handle YouTube IFrame Player initialization & playback
   useEffect(() => {
+    if (!ytVideoId) {
+      if (ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.destroy();
+        } catch {
+          // Ignore
+        }
+        ytPlayerRef.current = null;
+      }
+      if (ytIntervalRef.current) clearInterval(ytIntervalRef.current);
+      return;
+    }
+
+    // Stop standard HTML5 audio when playing YouTube
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+
+    setIsLoadingTrack(true);
+
+    const initYTPlayer = () => {
+      if (!ytContainerRef.current) return;
+      
+      // Clean previous container element
+      ytContainerRef.current.innerHTML = '<div id="yt-player-target"></div>';
+
+      try {
+        ytPlayerRef.current = new (window as any).YT.Player('yt-player-target', {
+          videoId: ytVideoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            origin: window.location.origin,
+          },
+          events: {
+            onReady: (event: any) => {
+              const p = event.target;
+              p.setVolume(isMuted ? 0 : volume * 100);
+              p.playVideo();
+              setIsLoadingTrack(false);
+              setIsPlaying(true);
+            },
+            onStateChange: (event: any) => {
+              const state = event.data;
+              // YT.PlayerState.PLAYING = 1
+              if (state === 1) {
+                setIsPlaying(true);
+                setIsLoadingTrack(false);
+                if (ytPlayerRef.current?.getDuration) {
+                  setDuration(ytPlayerRef.current.getDuration() || 0);
+                }
+                if (ytIntervalRef.current) clearInterval(ytIntervalRef.current);
+                ytIntervalRef.current = setInterval(() => {
+                  if (ytPlayerRef.current?.getCurrentTime && !isScrubbing) {
+                    setCurrentTime(ytPlayerRef.current.getCurrentTime() || 0);
+                  }
+                }, 500);
+              } else if (state === 2) { // PAUSED
+                setIsPlaying(false);
+                if (ytIntervalRef.current) clearInterval(ytIntervalRef.current);
+              } else if (state === 0) { // ENDED
+                setIsPlaying(false);
+                setCurrentTime(0);
+                if (ytIntervalRef.current) clearInterval(ytIntervalRef.current);
+              }
+            },
+            onError: (err: any) => {
+              console.warn('YouTube Player Error:', err);
+              setIsLoadingTrack(false);
+              setIsPlaying(false);
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to construct YouTube player:', err);
+        setIsLoadingTrack(false);
+      }
+    };
+
+    // Load YouTube IFrame API script if not already present
+    if (typeof (window as any).YT === 'undefined' || !(window as any).YT.Player) {
+      const existingScript = document.getElementById('youtube-iframe-api-script');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.id = 'youtube-iframe-api-script';
+        script.src = 'https://www.youtube.com/iframe_api';
+        document.body.appendChild(script);
+      }
+      (window as any).onYouTubeIframeAPIReady = () => {
+        initYTPlayer();
+      };
+    } else {
+      initYTPlayer();
+    }
+
+    return () => {
+      if (ytIntervalRef.current) clearInterval(ytIntervalRef.current);
+    };
+  }, [ytVideoId]);
+
+  // When resolved track source changes for standard HTML5 audio
+  useEffect(() => {
+    if (ytVideoId) return;
+
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -135,7 +254,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       return;
     }
 
-    // Don't reload if the audio element is already loaded with this track
     const currentAttr = audio.getAttribute('src');
     if (currentAttr === resolvedAudioSrc || (resolvedAudioSrc && audio.src && (audio.src === resolvedAudioSrc || audio.src.endsWith(resolvedAudioSrc)))) {
       return;
@@ -146,7 +264,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     audio.load();
     setCurrentTime(0);
 
-    // Auto-resume playback if it was already playing
     if (wasPlaying) {
       const handleCanPlay = () => {
         audio
@@ -162,9 +279,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         audio.removeEventListener('canplay', handleCanPlay);
       };
     }
-  }, [resolvedAudioSrc]);
+  }, [resolvedAudioSrc, ytVideoId]);
 
+  // Listen to standard HTML5 audio events when not using YouTube
   useEffect(() => {
+    if (ytVideoId) return;
+
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -201,7 +321,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       audio.removeEventListener('progress', updateProgress);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [volume, isMuted, isScrubbing]);
+  }, [volume, isMuted, isScrubbing, ytVideoId]);
 
   const handleAudioError = () => {
     const audio = audioRef.current;
@@ -213,13 +333,34 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
   const togglePlay = async () => {
     sound.playClick();
-    const audio = audioRef.current;
-    if (!audio) return;
 
     if (isLoadingTrack) {
       showToast('Loading track... ⏳');
       return;
     }
+
+    // YouTube playback
+    if (ytVideoId) {
+      const p = ytPlayerRef.current;
+      if (p && typeof p.playVideo === 'function') {
+        if (isPlaying) {
+          p.pauseVideo();
+          setIsPlaying(false);
+          showToast(`Paused ${activeSongTitle || 'YouTube Music'}`);
+        } else {
+          p.playVideo();
+          setIsPlaying(true);
+          showToast(`Playing ${activeSongTitle || 'YouTube Music'} 🎵`);
+        }
+      } else {
+        showToast('Initializing YouTube Music... 🎵');
+      }
+      return;
+    }
+
+    // HTML5 audio playback
+    const audio = audioRef.current;
+    if (!audio) return;
 
     const currentSrc = resolvedAudioSrc;
     if (!currentSrc) {
@@ -258,22 +399,30 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
   const toggleMute = () => {
     sound.playClick();
-    const audio = audioRef.current;
-    if (!audio) return;
 
-    if (isMuted || volume === 0) {
-      const restore = prevVolume > 0 ? prevVolume : 0.8;
-      setIsMuted(false);
-      setVolume(restore);
-      audio.volume = restore;
-      showToast(`Volume: ${Math.round(restore * 100)}%`);
-    } else {
-      setPrevVolume(volume > 0 ? volume : 0.8);
-      setIsMuted(true);
-      setVolume(0);
-      audio.volume = 0;
-      showToast('Audio muted');
+    const newMute = !(isMuted || volume === 0);
+    const restore = prevVolume > 0 ? prevVolume : 0.8;
+    const targetVol = newMute ? 0 : restore;
+
+    setIsMuted(newMute);
+    if (!newMute) setVolume(restore);
+
+    // Update YouTube volume
+    if (ytVideoId && ytPlayerRef.current?.setVolume) {
+      try {
+        ytPlayerRef.current.setVolume(Math.round(targetVol * 100));
+      } catch {
+        // Ignore
+      }
     }
+
+    // Update HTML5 audio volume
+    const audio = audioRef.current;
+    if (audio) {
+      audio.volume = targetVol;
+    }
+
+    showToast(newMute ? 'Audio muted' : `Volume: ${Math.round(restore * 100)}%`);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,6 +430,14 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     setVolume(newVol);
     setIsMuted(newVol === 0);
     if (newVol > 0) setPrevVolume(newVol);
+
+    if (ytVideoId && ytPlayerRef.current?.setVolume) {
+      try {
+        ytPlayerRef.current.setVolume(Math.round(newVol * 100));
+      } catch {
+        // Ignore
+      }
+    }
 
     const audio = audioRef.current;
     if (audio) {
@@ -305,12 +462,23 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
   const handleScrubEnd = (e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
     setIsScrubbing(false);
-    const audio = audioRef.current;
-    if (!audio) return;
     const target = e.currentTarget as HTMLInputElement;
     const time = Number(target.value);
-    audio.currentTime = time;
     setCurrentTime(time);
+
+    if (ytVideoId && ytPlayerRef.current?.seekTo) {
+      try {
+        ytPlayerRef.current.seekTo(time, true);
+      } catch {
+        // Ignore
+      }
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = time;
+    }
   };
 
   const formatTime = (secs: number) => {
@@ -342,7 +510,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       }}
       className="fixed left-1/2 -translate-x-1/2 z-40 px-2.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/92 border border-white/15 backdrop-blur-2xl shadow-2xl flex items-center gap-2 sm:gap-2.5 text-xs w-[calc(100vw-1.25rem)] sm:w-[calc(100vw-2rem)] max-w-lg touch-manipulation select-none"
     >
-      {/* Hidden audio element */}
+      {/* Hidden audio & YouTube player elements */}
       <audio
         ref={audioRef}
         src={resolvedAudioSrc || undefined}
@@ -351,14 +519,15 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         preload="auto"
         onError={handleAudioError}
       />
+      <div ref={ytContainerRef} className="hidden w-0 h-0 overflow-hidden pointer-events-none absolute" />
 
       {/* Rotating Vinyl Disc */}
       <motion.div
         animate={{ rotate: isPlaying && !isMuted && volume > 0 ? 360 : 0 }}
         transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
-        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center justify-center shrink-0 text-purple-300 shadow-sm"
+        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center justify-center shrink-0 text-purple-300 shadow-sm relative"
       >
-        <Disc3 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+        {ytVideoId ? <Youtube className="w-4 h-4 text-red-400" /> : <Disc3 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />}
       </motion.div>
 
       {/* Track Details & Scrubber */}

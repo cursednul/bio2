@@ -26,6 +26,8 @@ import {
   User,
   Save,
   Check,
+  Youtube,
+  Search,
 } from 'lucide-react';
 import {
   doc,
@@ -58,6 +60,12 @@ import {
   getDeletedTrackIds,
   ServerTrack,
 } from '../utils/trackService';
+import {
+  searchYouTubeMusic,
+  YouTubeTrackResult,
+  formatYouTubeStreamUrl,
+  extractYouTubeVideoId,
+} from '../utils/youtubeService';
 
 export type AdminTab = 'general' | 'audio' | 'profile' | 'broadcast' | 'moderation';
 
@@ -157,6 +165,55 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [savedTracks, setSavedTracks] = useState<AudioTrack[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // YouTube Music search state
+  const [musicSubTab, setMusicSubTab] = useState<'ytmusic' | 'upload'>('ytmusic');
+  const [ytQuery, setYtQuery] = useState('');
+  const [ytResults, setYtResults] = useState<YouTubeTrackResult[]>([]);
+  const [isSearchingYt, setIsSearchingYt] = useState(false);
+
+  const handleSearchYt = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = ytQuery.trim() || 'In My Mind';
+    setIsSearchingYt(true);
+    sound.playClick();
+    try {
+      const res = await searchYouTubeMusic(clean);
+      setYtResults(res);
+    } catch {
+      showToast('YouTube Music search failed');
+    } finally {
+      setIsSearchingYt(false);
+    }
+  };
+
+  const handleBroadcastYtTrack = async (item: YouTubeTrackResult) => {
+    sound.playChime();
+    const trackId = item.id;
+    const finalAudioUrl = item.url;
+
+    onSetActiveSong(item.title, item.artist, finalAudioUrl);
+    onSetFavSong(item.title);
+
+    await saveGlobalSettingsToFirestore({
+      activeSongId: trackId,
+      activeSongTitle: item.title.slice(0, 100),
+      activeSongArtist: item.artist.slice(0, 100),
+      activeSongUrl: finalAudioUrl,
+      favSong: item.title.slice(0, 64),
+    });
+
+    await setDoc(doc(db, 'tracks', trackId), {
+      title: item.title.slice(0, 100),
+      artist: item.artist.slice(0, 100),
+      audioUrl: finalAudioUrl,
+      sourceType: 'preset',
+      duration: item.durationSec,
+      createdAt: new Date().toISOString(),
+    }).catch(() => {});
+
+    showToast(`Broadcasted from YouTube Music: ${item.title} 🎵`);
+  };
+
   // Sync draft states and initialTab when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -168,6 +225,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setNicknameDraft(nickname);
       setBioDraft(bioEmoticon);
       setAvatarDraft(avatarUrl);
+      if (ytResults.length === 0) {
+        handleSearchYt();
+      }
     } else {
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
@@ -640,9 +700,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             /* Login Form with Google Auth Only */
             <div className="space-y-4 my-auto py-4">
               <div className="p-5 rounded-2xl bg-purple-950/20 border border-purple-500/30 space-y-4 text-center">
-                <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                  Sign in with your Google Account to authenticate as Administrator.
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs text-zinc-300 leading-relaxed font-medium">
+                    Sign in with your Google Account to authenticate as Administrator.
+                  </p>
+                  <p className="text-[10px] font-mono text-purple-300/80 bg-purple-900/30 py-1 px-2.5 rounded-lg inline-block border border-purple-500/20">
+                    Active Origin: {typeof window !== 'undefined' ? window.location.hostname : 'cursednul.netlify.app'}
+                  </p>
+                </div>
 
                 <button
                   type="button"
@@ -675,7 +740,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                         />
                       </svg>
-                      <span>Sign in with Google</span>
+                      <span>Sign in with Google (Popup)</span>
                     </>
                   )}
                 </button>
@@ -811,9 +876,145 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 2: Audio & MP3 Upload Suite */}
+              {/* TAB 2: Audio & Music Suite (YouTube Music & MP3 Upload) */}
               {activeTab === 'audio' && (
                 <div className="space-y-4">
+                  {/* Music Mode Switcher */}
+                  <div className="flex items-center gap-1 p-1 rounded-xl bg-white/5 border border-white/10 text-xs font-mono">
+                    <button
+                      onClick={() => {
+                        sound.playClick();
+                        setMusicSubTab('ytmusic');
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        musicSubTab === 'ytmusic'
+                          ? 'bg-red-600 text-white font-medium shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <Youtube className="w-3.5 h-3.5 text-white" />
+                      <span>YouTube Music</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        sound.playClick();
+                        setMusicSubTab('upload');
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        musicSubTab === 'upload'
+                          ? 'bg-purple-600 text-white font-medium shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload MP3 / URL</span>
+                    </button>
+                  </div>
+
+                  {/* SUB-TAB 1: YouTube Music API Search */}
+                  {musicSubTab === 'ytmusic' && (
+                    <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                          <Youtube className="w-4 h-4 text-red-400" />
+                          <span>Search YouTube Music</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          Live API Stream
+                        </span>
+                      </div>
+
+                      <form onSubmit={handleSearchYt} className="flex gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            placeholder="Search song, artist or paste YouTube URL..."
+                            value={ytQuery}
+                            onChange={(e) => setYtQuery(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                          />
+                          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isSearchingYt}
+                          className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0"
+                        >
+                          {isSearchingYt ? (
+                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Search className="w-3.5 h-3.5" />
+                          )}
+                          <span>Search</span>
+                        </button>
+                      </form>
+
+                      {/* YouTube Results Grid */}
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {isSearchingYt ? (
+                          <div className="text-center py-6 text-xs font-mono text-zinc-400 animate-pulse">
+                            Searching YouTube Music API... 🎵
+                          </div>
+                        ) : ytResults.length === 0 ? (
+                          <div className="text-center py-6 text-xs font-mono text-zinc-500">
+                            Type a song name above and tap Search to find YouTube Music tracks.
+                          </div>
+                        ) : (
+                          ytResults.map((item) => {
+                            const isSelected = activeSongUrl === item.url || (extractYouTubeVideoId(activeSongUrl) === item.videoId);
+                            return (
+                              <div
+                                key={item.id}
+                                className={`flex items-center justify-between p-2 rounded-xl border text-xs transition-colors ${
+                                  isSelected
+                                    ? 'bg-red-950/40 border-red-500/60 text-white'
+                                    : 'bg-white/5 border-white/5 text-zinc-300 hover:bg-white/10'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <img
+                                    src={item.thumbnail}
+                                    alt={item.title}
+                                    className="w-10 h-10 rounded-lg object-cover shrink-0 border border-white/10"
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="font-semibold truncate text-xs flex items-center gap-1.5">
+                                      <span className="truncate">{item.title}</span>
+                                      {isSelected && (
+                                        <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
+                                          LIVE NOW
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] font-mono text-zinc-400 truncate">
+                                      {item.artist} · {item.durationStr}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleBroadcastYtTrack(item)}
+                                  className={`px-2.5 py-1.5 rounded-lg font-mono text-[10px] font-semibold flex items-center gap-1 shrink-0 transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-red-600 hover:bg-red-500 text-white'
+                                  }`}
+                                  title="Broadcast this YouTube song live"
+                                >
+                                  <Radio className="w-3 h-3" />
+                                  <span>{isSelected ? 'Playing' : 'Play Live'}</span>
+                                </button>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUB-TAB 2: MP3 File Upload */}
+                  {musicSubTab === 'upload' && (
                   <form onSubmit={handleSaveTrack} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
@@ -851,8 +1052,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         </span>
                       </label>
                     </div>
-
-
 
                     {/* Direct Stream URL input */}
                     <div>
@@ -925,6 +1124,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </div>
                     )}
                   </form>
+                  )}
 
                   {/* Hidden preview audio element for testing tracks before broadcast */}
                   <audio ref={previewAudioRef} onEnded={() => setPreviewTrackId(null)} className="hidden" />
