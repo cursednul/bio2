@@ -171,8 +171,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [ytResults, setYtResults] = useState<YouTubeTrackResult[]>([]);
   const [isSearchingYt, setIsSearchingYt] = useState(false);
 
+  // Track renaming state
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
+  const [editTitleDraft, setEditTitleDraft] = useState('');
+  const [editArtistDraft, setEditArtistDraft] = useState('');
+
   const handleSearchYt = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     const clean = ytQuery.trim() || 'In My Mind';
     setIsSearchingYt(true);
     sound.playClick();
@@ -212,6 +219,58 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }).catch(() => {});
 
     showToast(`Broadcasted from YouTube Music: ${item.title} 🎵`);
+  };
+
+  const handleStartEditTrack = (track: AudioTrack) => {
+    sound.playClick();
+    setEditingTrackId(track.id);
+    setEditTitleDraft(track.title);
+    setEditArtistDraft(track.artist || '');
+  };
+
+  const handleSaveRenameTrack = async (track: AudioTrack) => {
+    sound.playChime();
+    const cleanTitle = editTitleDraft.trim();
+    const cleanArtist = editArtistDraft.trim() || 'Unknown Artist';
+    if (!cleanTitle) {
+      showToast('Title cannot be empty');
+      return;
+    }
+
+    try {
+      // Update in Firestore
+      await setDoc(
+        doc(db, 'tracks', track.id),
+        {
+          title: cleanTitle.slice(0, 100),
+          artist: cleanArtist.slice(0, 100),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      // Update local state
+      setSavedTracks((prev) =>
+        prev.map((t) => (t.id === track.id ? { ...t, title: cleanTitle, artist: cleanArtist } : t))
+      );
+
+      // If currently active song, update global active song
+      if (activeSongTitle === track.title || activeSongUrl === track.audioUrl) {
+        onSetActiveSong(cleanTitle, cleanArtist, track.audioUrl);
+        onSetFavSong(cleanTitle);
+        await saveGlobalSettingsToFirestore({
+          activeSongTitle: cleanTitle.slice(0, 100),
+          activeSongArtist: cleanArtist.slice(0, 100),
+          favSong: cleanTitle.slice(0, 64),
+        });
+      }
+
+      setEditingTrackId(null);
+      showToast(`Updated: ${cleanTitle} by ${cleanArtist} ✨`);
+    } catch (err) {
+      console.error('Rename error:', err);
+      showToast('Failed to update track details');
+    }
   };
 
   // Sync draft states and initialTab when modal opens
@@ -1145,6 +1204,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         {savedTracks.map((trk) => {
                           const isActive = activeSongTitle === trk.title || activeSongUrl === trk.audioUrl;
                           const isPreviewing = previewTrackId === trk.id;
+                          const isEditing = editingTrackId === trk.id;
                           return (
                             <div
                               key={trk.id}
@@ -1154,24 +1214,70 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                                   : 'bg-white/5 border-white/5 text-zinc-300'
                               }`}
                             >
-                              <div className="min-w-0 pr-2">
-                                <div className="font-semibold truncate text-xs flex items-center gap-1.5">
-                                  <span>{trk.title}</span>
-                                  {isActive && (
-                                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                      LIVE NOW
-                                    </span>
-                                  )}
-                                  {isPreviewing && !isActive && (
-                                    <span className="text-[9px] font-mono text-pink-400 bg-pink-500/20 px-1 rounded">
-                                      PREVIEWING
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] font-mono text-zinc-400 truncate">
-                                  {trk.artist} · {trk.sourceType === 'upload' ? 'MP3 Upload' : 'Stream URL'}
-                                </div>
+                              <div className="min-w-0 pr-2 flex-1">
+                                {isEditing ? (
+                                  <div className="space-y-1.5 py-1">
+                                    <input
+                                      type="text"
+                                      placeholder="Song Title"
+                                      value={editTitleDraft}
+                                      onChange={(e) => setEditTitleDraft(e.target.value)}
+                                      className="w-full px-2 py-1 rounded bg-black/60 border border-purple-400 text-xs text-white focus:outline-none"
+                                      autoFocus
+                                    />
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="text"
+                                        placeholder="Artist Name"
+                                        value={editArtistDraft}
+                                        onChange={(e) => setEditArtistDraft(e.target.value)}
+                                        className="w-full px-2 py-1 rounded bg-black/60 border border-purple-400 text-xs text-white focus:outline-none"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveRenameTrack(trk)}
+                                        className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-mono cursor-pointer shrink-0"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingTrackId(null)}
+                                        className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-zinc-300 text-[10px] font-mono cursor-pointer shrink-0"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="font-semibold truncate text-xs flex items-center gap-1.5">
+                                      <span className="truncate">{trk.title}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditTrack(trk)}
+                                        className="text-[10px] text-purple-300 hover:text-white underline cursor-pointer shrink-0"
+                                        title="Rename track"
+                                      >
+                                        rename
+                                      </button>
+                                      {isActive && (
+                                        <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                          LIVE
+                                        </span>
+                                      )}
+                                      {isPreviewing && !isActive && (
+                                        <span className="text-[9px] font-mono text-pink-400 bg-pink-500/20 px-1 rounded">
+                                          PREVIEW
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] font-mono text-zinc-400 truncate">
+                                      {trk.artist} · {trk.sourceType === 'upload' ? 'MP3 Upload' : 'Stream URL'}
+                                    </div>
+                                  </>
+                                )}
                               </div>
 
                               <div className="flex items-center gap-1 shrink-0">

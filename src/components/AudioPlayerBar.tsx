@@ -162,7 +162,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         ytPlayerRef.current = new (window as any).YT.Player('yt-player-target', {
           videoId: ytVideoId,
           playerVars: {
-            autoplay: 1,
+            autoplay: 0,
             controls: 0,
             disablekb: 1,
             fs: 0,
@@ -175,9 +175,9 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
             onReady: (event: any) => {
               const p = event.target;
               p.setVolume(isMuted ? 0 : volume * 100);
-              p.playVideo();
+              p.pauseVideo();
               setIsLoadingTrack(false);
-              setIsPlaying(true);
+              setIsPlaying(false);
             },
             onStateChange: (event: any) => {
               const state = event.data;
