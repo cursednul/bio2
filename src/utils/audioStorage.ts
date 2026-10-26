@@ -1,5 +1,4 @@
-// IndexedDB and Firestore Chunking engine for 100% Cross-Device Audio Sync
-import { collection, doc, setDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const DB_NAME = 'cursed_audio_db';
@@ -118,16 +117,40 @@ export async function uploadAudioChunksToFirestore(
 }
 
 // Fetches audio chunks from Firestore and reconstructs Blob on any device (phone, laptop, visitor)
-export async function fetchAudioChunksFromFirestore(trackId: string): Promise<Blob | null> {
+export async function fetchAudioChunksFromFirestore(trackId: string): Promise<Blob | string | null> {
   try {
-    const chunksQuery = query(collection(db, 'tracks', trackId, 'chunks'), orderBy('index', 'asc'));
-    const snapshot = await getDocs(chunksQuery);
-    if (snapshot.empty) return null;
+    // 1. Fetch chunks collection without requiring composite index ordering
+    const snapshot = await getDocs(collection(db, 'tracks', trackId, 'chunks'));
+    if (snapshot.empty) {
+      // Check if parent track document has direct audioUrl or Base64 data
+      try {
+        const trackSnap = await getDoc(doc(db, 'tracks', trackId));
+        if (trackSnap.exists()) {
+          const d = trackSnap.data();
+          if (
+            d?.audioUrl &&
+            (d.audioUrl.startsWith('http://') ||
+              d.audioUrl.startsWith('https://') ||
+              d.audioUrl.startsWith('data:') ||
+              d.audioUrl.startsWith('blob:'))
+          ) {
+            return d.audioUrl;
+          }
+        }
+      } catch {
+        // Ignore doc lookup
+      }
+      return null;
+    }
+
+    // Sort chunk docs safely in JS memory by index
+    const sortedDocs = snapshot.docs
+      .map((d) => d.data())
+      .sort((a, b) => (Number(a.index) || 0) - (Number(b.index) || 0));
 
     let mimeType = 'audio/mpeg';
     const parts: string[] = [];
-    snapshot.forEach((docSnap) => {
-      const d = docSnap.data();
+    sortedDocs.forEach((d) => {
       if (d.mimeType) mimeType = d.mimeType;
       if (typeof d.data === 'string') {
         parts.push(d.data);
@@ -211,16 +234,17 @@ export async function getStoredAudioUrl(idOrUrl: string): Promise<string | null>
 
     // 2. Fetch from Firestore server (enables cross-device sync on phone, tablet, other PCs)
     try {
-      const cloudBlob = await fetchAudioChunksFromFirestore(trackId);
-      if (cloudBlob) {
-        return URL.createObjectURL(cloudBlob);
+      const cloudRes = await fetchAudioChunksFromFirestore(trackId);
+      if (cloudRes) {
+        if (typeof cloudRes === 'string') return cloudRes;
+        return URL.createObjectURL(cloudRes);
       }
     } catch {
       // Ignore
     }
   }
 
-  return clean;
+  return null;
 }
 
 export async function calculateAudioDuration(file: File): Promise<number> {
