@@ -64,10 +64,10 @@ export default function App() {
   const [favGame, setFavGame] = useState<string>('Watch Dogs 2');
   const [favSong, setFavSong] = useState<string>('Cyberpunk Synthwave');
 
-  // Live Audio Player Song Details - 100% locally hosted asset that never 404s/403s
-  const [activeSongTitle, setActiveSongTitle] = useState<string>('Phantom Ambient');
-  const [activeSongArtist, setActiveSongArtist] = useState<string>('cursed');
-  const [activeSongUrl, setActiveSongUrl] = useState<string>('/audio/ambient_track.mp3');
+  // Live Audio Player Song Details
+  const [activeSongTitle, setActiveSongTitle] = useState<string>('');
+  const [activeSongArtist, setActiveSongArtist] = useState<string>('');
+  const [activeSongUrl, setActiveSongUrl] = useState<string>('');
 
   // Profile Customization
   const [nickname, setNickname] = useState<string>('cursed');
@@ -104,15 +104,9 @@ export default function App() {
           if (data.nickname) setNickname(data.nickname);
           if (data.bioEmoticon) setBioEmoticon(data.bioEmoticon);
           if (data.avatarUrl !== undefined) setAvatarUrl(data.avatarUrl);
-          if (data.activeSongTitle) setActiveSongTitle(data.activeSongTitle);
-          if (data.activeSongArtist) setActiveSongArtist(data.activeSongArtist);
-          if (data.activeSongUrl !== undefined) {
-            if (data.activeSongUrl.includes('pixabay.com') || data.activeSongUrl.includes('synth_drone.ogg')) {
-              setActiveSongUrl('/audio/ambient_track.mp3');
-            } else {
-              setActiveSongUrl(data.activeSongUrl);
-            }
-          }
+          if (data.activeSongTitle !== undefined) setActiveSongTitle(data.activeSongTitle);
+          if (data.activeSongArtist !== undefined) setActiveSongArtist(data.activeSongArtist);
+          if (data.activeSongUrl !== undefined) setActiveSongUrl(data.activeSongUrl);
         } else {
           // Initialize default document in Firestore if not present yet
           setDoc(
@@ -120,16 +114,16 @@ export default function App() {
             {
               socialsViewMode: 'cards',
               favGame: 'Watch Dogs 2',
-              favSong: 'Phantom Ambient',
+              favSong: '',
               announcement: 'Welcome to cursed · Connect on Telegram, TikTok & Discord',
               announcementActive: false,
               motionPreset: 'flow',
               nickname: 'cursed',
               bioEmoticon: '(˶>⩊<˶)',
               avatarUrl: '',
-              activeSongTitle: 'Phantom Ambient',
-              activeSongArtist: 'cursed',
-              activeSongUrl: '/audio/ambient_track.mp3',
+              activeSongTitle: '',
+              activeSongArtist: '',
+              activeSongUrl: '',
               updatedAt: new Date().toISOString(),
             },
             { merge: true }

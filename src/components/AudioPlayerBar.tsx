@@ -78,7 +78,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     async function resolveSrc() {
       if (!activeSongUrl || !activeSongUrl.trim()) {
         if (isMounted) {
-          setResolvedAudioSrc('/audio/ambient_track.mp3');
+          setResolvedAudioSrc('');
           setIsLoadingTrack(false);
         }
         return;
@@ -86,7 +86,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
       // Fast-path: Bundled assets, direct external URLs, or local memory blobs
       if (
-        activeSongUrl.startsWith('/audio/') ||
         activeSongUrl.startsWith('http://') ||
         activeSongUrl.startsWith('https://') ||
         activeSongUrl.startsWith('blob:') ||
@@ -104,12 +103,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
         if (isMounted) {
-          setResolvedAudioSrc(resolved || activeSongUrl || '/audio/ambient_track.mp3');
+          setResolvedAudioSrc(resolved || (activeSongUrl && !activeSongUrl.startsWith('firestore://') ? activeSongUrl : ''));
           setIsLoadingTrack(false);
         }
       } catch {
         if (isMounted) {
-          setResolvedAudioSrc(activeSongUrl || '/audio/ambient_track.mp3');
+          setResolvedAudioSrc(activeSongUrl && !activeSongUrl.startsWith('firestore://') ? activeSongUrl : '');
           setIsLoadingTrack(false);
         }
       }
@@ -205,12 +204,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     if (audio?.error) {
       console.warn('Audio media error encountered:', audio.error.message || audio.error.code);
       setIsPlaying(false);
-
-      // If the current audio source failed and we haven't tried the bundled fallback yet, switch
-      if (!fallbackAttemptedRef.current && resolvedAudioSrc !== '/audio/ambient_track.mp3') {
-        fallbackAttemptedRef.current = true;
-        setResolvedAudioSrc('/audio/ambient_track.mp3');
-      }
     }
   };
 
@@ -224,7 +217,11 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       return;
     }
 
-    const currentSrc = resolvedAudioSrc || '/audio/ambient_track.mp3';
+    const currentSrc = resolvedAudioSrc;
+    if (!currentSrc) {
+      showToast('No audio source loaded');
+      return;
+    }
 
     if (!audio.src || (audio.getAttribute('src') !== currentSrc && audio.src !== currentSrc)) {
       audio.src = currentSrc;
@@ -246,11 +243,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       } catch (err: any) {
         console.warn('Playback failed:', err);
         setIsPlaying(false);
-        if (!fallbackAttemptedRef.current && resolvedAudioSrc !== '/audio/ambient_track.mp3') {
-          fallbackAttemptedRef.current = true;
-          setResolvedAudioSrc('/audio/ambient_track.mp3');
-          showToast('Loaded backup track 🎵');
-        } else if (err?.name === 'NotAllowedError') {
+        if (err?.name === 'NotAllowedError') {
           showToast('Tap play to start audio 🎵');
         } else {
           showToast(`Tap play again to start ${activeSongTitle || 'track'}`);

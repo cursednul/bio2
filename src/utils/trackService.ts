@@ -12,20 +12,8 @@ export interface ServerTrack {
   streamUrl: string;
 }
 
-// Guaranteed bundled audio tracks that work on every device without network dependency
-export const BUNDLED_DEFAULT_TRACKS: ServerTrack[] = [
-  {
-    id: 'bundled-ambient-1',
-    title: 'Phantom Ambient',
-    artist: 'cursed',
-    filename: 'ambient_track.mp3',
-    originalName: 'ambient_track.mp3',
-    mimeType: 'audio/mpeg',
-    size: 6940000,
-    createdAt: new Date().toISOString(),
-    streamUrl: '/audio/ambient_track.mp3',
-  },
-];
+// Default audio tracks catalog
+export const BUNDLED_DEFAULT_TRACKS: ServerTrack[] = [];
 
 const LOCAL_STORAGE_TRACKS_KEY = 'cursed_local_uploaded_tracks';
 const LOCAL_STORAGE_DELETED_KEY = 'cursed_deleted_track_ids';
@@ -144,7 +132,7 @@ export function uploadTrackToServer(
       mimeType: file.type || 'audio/mpeg',
       size: file.size,
       createdAt: new Date().toISOString(),
-      streamUrl: localBlobUrl || `/audio/ambient_track.mp3`,
+      streamUrl: localBlobUrl || '',
     };
 
     // Try posting to /api/tracks/upload

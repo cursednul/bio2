@@ -548,16 +548,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setSavedTracks((prev) => prev.filter((t) => t.id !== track.id));
       setConfirmDeleteId(null);
 
-      // 4. If the track being deleted was the active broadcast song, revert to ambient default
+      // 4. If the track being deleted was the active broadcast song, clear active song
       if (activeSongTitle === track.title || activeSongUrl === track.audioUrl) {
-        onSetActiveSong('Phantom Ambient', 'cursed', '/audio/ambient_track.mp3');
-        onSetFavSong('Phantom Ambient');
+        onSetActiveSong('', '', '');
+        onSetFavSong('');
         await saveGlobalSettingsToFirestore({
-          activeSongId: 'bundled-ambient-1',
-          activeSongTitle: 'Phantom Ambient',
-          activeSongArtist: 'cursed',
-          activeSongUrl: '/audio/ambient_track.mp3',
-          favSong: 'Phantom Ambient',
+          activeSongId: '',
+          activeSongTitle: '',
+          activeSongArtist: '',
+          activeSongUrl: '',
+          favSong: '',
         });
       }
 
