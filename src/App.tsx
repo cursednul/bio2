@@ -8,8 +8,9 @@ import { ProfileCard } from './components/ProfileCard';
 import { SocialLinks } from './components/SocialLinks';
 import { Comments } from './components/Comments';
 import { AudioPlayerBar } from './components/AudioPlayerBar';
-import { AdminModal } from './components/AdminModal';
+import { AdminModal, AdminTab } from './components/AdminModal';
 import { Toast } from './components/Toast';
+import { LoadingScreen } from './components/LoadingScreen';
 import { ThemeConfig, SocialsViewMode, GlobalSettingsDoc } from './types';
 import { sound } from './utils/audio';
 
@@ -34,7 +35,10 @@ export default function App() {
   const theme = SIGNATURE_THEME;
   const [activeTab, setActiveTab] = useState<ActiveTab>('socials');
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminModalInitialTab, setAdminModalInitialTab] = useState<AdminTab>('audio');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [commentResetKey, setCommentResetKey] = useState(0);
 
   // Admin session authentication state
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
@@ -60,11 +64,11 @@ export default function App() {
   const [favGame, setFavGame] = useState<string>('Watch Dogs 2');
   const [favSong, setFavSong] = useState<string>('Cyberpunk Synthwave');
 
-  // Live Audio Player Song Details
-  const [activeSongTitle, setActiveSongTitle] = useState<string>('Cyberpunk Synthwave');
-  const [activeSongArtist, setActiveSongArtist] = useState<string>('Nightrunner');
+  // Live Audio Player Song Details - CORS-friendly fallback that never 403s in preview or prod
+  const [activeSongTitle, setActiveSongTitle] = useState<string>('Cyberpunk Ambient');
+  const [activeSongArtist, setActiveSongArtist] = useState<string>('cursed');
   const [activeSongUrl, setActiveSongUrl] = useState<string>(
-    'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=cyberpunk-2099-10701.mp3'
+    'https://actions.google.com/sounds/v1/ambiences/synth_drone.ogg'
   );
 
   // Profile Customization
@@ -80,6 +84,10 @@ export default function App() {
 
   // Background Motion Engine Preset
   const [motionPreset, setMotionPreset] = useState<'flow' | 'hyper' | 'calm'>('flow');
+
+  // Secret 10-Click Admin Trigger on star icon
+  const [starClicks, setStarClicks] = useState(0);
+  const starTimerRef = useRef<number | null>(null);
 
   // Real-time synchronization of Global Settings from Firestore (Database Persistence)
   useEffect(() => {
@@ -100,7 +108,13 @@ export default function App() {
           if (data.avatarUrl !== undefined) setAvatarUrl(data.avatarUrl);
           if (data.activeSongTitle) setActiveSongTitle(data.activeSongTitle);
           if (data.activeSongArtist) setActiveSongArtist(data.activeSongArtist);
-          if (data.activeSongUrl !== undefined) setActiveSongUrl(data.activeSongUrl);
+          if (data.activeSongUrl !== undefined) {
+            if (data.activeSongUrl.includes('pixabay.com')) {
+              setActiveSongUrl('https://actions.google.com/sounds/v1/ambiences/synth_drone.ogg');
+            } else {
+              setActiveSongUrl(data.activeSongUrl);
+            }
+          }
         } else {
           // Initialize default document in Firestore if not present yet
           setDoc(
@@ -108,24 +122,26 @@ export default function App() {
             {
               socialsViewMode: 'cards',
               favGame: 'Watch Dogs 2',
-              favSong: 'Cyberpunk Synthwave',
+              favSong: 'Cyberpunk Ambient',
               announcement: 'Welcome to cursed · Connect on Telegram, TikTok & Discord',
               announcementActive: false,
               motionPreset: 'flow',
               nickname: 'cursed',
               bioEmoticon: '(˶>⩊<˶)',
               avatarUrl: '',
-              activeSongTitle: 'Cyberpunk Synthwave',
-              activeSongArtist: 'Nightrunner',
-              activeSongUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=cyberpunk-2099-10701.mp3',
+              activeSongTitle: 'Cyberpunk Ambient',
+              activeSongArtist: 'cursed',
+              activeSongUrl: 'https://actions.google.com/sounds/v1/ambiences/synth_drone.ogg',
               updatedAt: new Date().toISOString(),
             },
             { merge: true }
           ).catch((e) => handleFirestoreError(e, OperationType.CREATE, 'settings/global'));
         }
+        setIsReady(true);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'settings/global');
+        setIsReady(true); // Proceed even if load fails to prevent infinite hang
       }
     );
 
@@ -133,10 +149,6 @@ export default function App() {
   }, []);
 
   const motionScale = motionPreset === 'calm' ? 0.4 : motionPreset === 'hyper' ? 1.6 : 1.0;
-
-  // Secret 10-Click Admin Trigger on star icon
-  const [starClicks, setStarClicks] = useState(0);
-  const starTimerRef = useRef<number | null>(null);
 
   const handleStarClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -209,7 +221,6 @@ export default function App() {
     setFavSong(title);
   };
 
-  const [commentResetKey, setCommentResetKey] = useState(0);
   const handleClearAllComments = () => {
     setCommentResetKey((k) => k + 1);
   };
@@ -270,6 +281,11 @@ export default function App() {
       className="min-h-screen text-zinc-100 relative selection:bg-purple-500/30 selection:text-white transition-colors duration-700 pb-36 sm:pb-32"
       style={{ backgroundColor: theme.bgDark }}
     >
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {!isReady && <LoadingScreen key="app-loading-screen" />}
+      </AnimatePresence>
+
       {/* Toast Notification */}
       <Toast message={toastMessage} />
 
@@ -312,7 +328,11 @@ export default function App() {
 
           {isAdmin && (
             <button
-              onClick={() => setIsAdminModalOpen(true)}
+              onClick={() => {
+                sound.playClick();
+                setAdminModalInitialTab('general');
+                setIsAdminModalOpen(true);
+              }}
               className="px-2 py-0.5 min-h-[28px] rounded-full bg-emerald-950/70 border border-emerald-500/40 text-[10px] font-mono text-emerald-300 flex items-center gap-1 cursor-pointer shadow-sm hover:bg-emerald-900/60 transition-colors"
               title="Open Admin Suite"
             >
@@ -433,7 +453,15 @@ export default function App() {
         activeSongTitle={activeSongTitle}
         activeSongArtist={activeSongArtist}
         activeSongUrl={activeSongUrl}
-        onOpenUpload={isAdmin ? () => setIsAdminModalOpen(true) : undefined}
+        onOpenUpload={
+          isAdmin
+            ? () => {
+                sound.playClick();
+                setAdminModalInitialTab('audio');
+                setIsAdminModalOpen(true);
+              }
+            : undefined
+        }
       />
 
       {/* Secret Admin Control Suite */}
@@ -443,6 +471,7 @@ export default function App() {
         isAdmin={isAdmin}
         onLoginSuccess={handleAdminLogin}
         onLogout={handleAdminLogout}
+        initialTab={adminModalInitialTab}
         socialsViewMode={socialsViewMode}
         onSetSocialsViewMode={handleUpdateSocialsViewMode}
         favGame={favGame}

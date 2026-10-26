@@ -27,6 +27,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>('');
+  const [isLoadingTrack, setIsLoadingTrack] = useState<boolean>(false);
 
   // Volume state
   const [volume, setVolume] = useState<number>(() => {
@@ -46,21 +47,29 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // Resolve activeSongUrl (handles Blob Object URLs, Data URLs, IndexedDB IDs, stream links)
+  // Resolve activeSongUrl (handles Blob Object URLs, Data URLs, IndexedDB IDs, stream links, and cross-device Firestore chunks)
   useEffect(() => {
     let isMounted = true;
     async function resolveSrc() {
       if (!activeSongUrl || !activeSongUrl.trim()) {
-        if (isMounted) setResolvedAudioSrc('');
+        if (isMounted) {
+          setResolvedAudioSrc('');
+          setIsLoadingTrack(false);
+        }
         return;
       }
+      if (isMounted) setIsLoadingTrack(true);
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
         if (isMounted) {
           setResolvedAudioSrc(resolved || activeSongUrl || '');
+          setIsLoadingTrack(false);
         }
       } catch {
-        if (isMounted) setResolvedAudioSrc(activeSongUrl || '');
+        if (isMounted) {
+          setResolvedAudioSrc(activeSongUrl || '');
+          setIsLoadingTrack(false);
+        }
       }
     }
     resolveSrc();
@@ -143,6 +152,11 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     sound.playClick();
     const audio = audioRef.current;
     if (!audio) return;
+
+    if (isLoadingTrack) {
+      showToast('Syncing track from cloud... ⏳');
+      return;
+    }
 
     if (!resolvedAudioSrc) {
       showToast('No audio source available. Upload or select a track in Admin 🎵');
@@ -330,11 +344,20 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       {/* Play/Pause Button - Touch optimized size */}
       <button
         onClick={togglePlay}
-        className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-92 text-white flex items-center justify-center shadow-md cursor-pointer shrink-0 transition-transform"
-        title={isPlaying ? 'Pause' : 'Play'}
+        disabled={isLoadingTrack}
+        className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-92 text-white flex items-center justify-center shadow-md cursor-pointer shrink-0 transition-transform disabled:opacity-80"
+        title={isLoadingTrack ? 'Syncing track...' : isPlaying ? 'Pause' : 'Play'}
         aria-label={isPlaying ? 'Pause music' : 'Play music'}
       >
-        {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+        {isLoadingTrack ? (
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-white animate-spin">
+            <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
+          </svg>
+        ) : isPlaying ? (
+          <Pause className="w-4 h-4" />
+        ) : (
+          <Play className="w-4 h-4 ml-0.5" />
+        )}
       </button>
 
       {/* Volume Controller with Touch Toggle */}

@@ -36,11 +36,17 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db, storage, handleFirestoreError, OperationType } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { SocialsViewMode, AudioTrack, GlobalSettingsDoc } from '../types';
 import { sound } from '../utils/audio';
-import { storeAudioBlob, calculateAudioDuration, getStoredAudioUrl, fileToDataUrl } from '../utils/audioStorage';
+import {
+  storeAudioBlob,
+  calculateAudioDuration,
+  getStoredAudioUrl,
+  uploadAudioChunksToFirestore,
+} from '../utils/audioStorage';
+
+export type AdminTab = 'general' | 'audio' | 'profile' | 'broadcast' | 'moderation';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -48,6 +54,7 @@ interface AdminModalProps {
   isAdmin: boolean;
   onLoginSuccess: () => void;
   onLogout: () => void;
+  initialTab?: AdminTab;
   // Live State
   socialsViewMode: SocialsViewMode;
   onSetSocialsViewMode: (mode: SocialsViewMode) => void;
@@ -88,14 +95,13 @@ function verifyPasscode(input: string): boolean {
   }
 }
 
-type AdminTab = 'general' | 'audio' | 'profile' | 'broadcast' | 'moderation';
-
 export const AdminModal: React.FC<AdminModalProps> = ({
   isOpen,
   onClose,
   isAdmin,
   onLoginSuccess,
   onLogout,
+  initialTab = 'audio',
   socialsViewMode,
   onSetSocialsViewMode,
   favGame,
@@ -124,8 +130,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
-  const [activeTab, setActiveTab] = useState<AdminTab>('general');
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isSavingDb, setIsSavingDb] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ percent: number; current: number; total: number } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Draft form states
   const [gameDraft, setGameDraft] = useState(favGame);
@@ -145,9 +153,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [savedTracks, setSavedTracks] = useState<AudioTrack[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Sync draft states when modal opens
+  // Sync draft states and initialTab when modal opens
   useEffect(() => {
     if (isOpen) {
+      if (initialTab) setActiveTab(initialTab);
       setGameDraft(favGame);
       setSongDraft(favSong);
       setAnnounceDraft(announcement);
@@ -156,13 +165,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setBioDraft(bioEmoticon);
       setAvatarDraft(avatarUrl);
     }
-  }, [isOpen, favGame, favSong, announcement, announcementActive, nickname, bioEmoticon, avatarUrl]);
+  }, [isOpen, initialTab, favGame, favSong, announcement, announcementActive, nickname, bioEmoticon, avatarUrl]);
 
-  // Subscribe to Tracks in Firestore
+  // Subscribe to Tracks in Firestore so catalog is available in preview and admin
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isOpen) return;
 
-    const q = query(collection(db, 'tracks'), limit(20));
+    const q = query(collection(db, 'tracks'), limit(30));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -316,36 +325,48 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
       if (selectedFile) {
         sourceType = 'upload';
-        duration = await calculateAudioDuration(selectedFile);
-        const trackId = `track_${Date.now()}`;
-        const storageRef = ref(storage, `tracks/${trackId}`);
-
-        try {
-          // Upload to Firebase Storage
-          await uploadBytes(storageRef, selectedFile);
-          // Get public download URL
-          const downloadUrl = await getDownloadURL(storageRef);
-          firestoreAudioUrl = downloadUrl;
-          finalAudioUrl = downloadUrl;
-        } catch (err) {
-          console.error('Storage upload error:', err);
-          showToast('Failed to upload audio to server');
+        if (selectedFile.size > 15 * 1024 * 1024) {
+          showToast('Audio file exceeds 15MB limit. Please choose a smaller MP3.');
           setIsUploadingTrack(false);
           return;
         }
+
+        duration = await calculateAudioDuration(selectedFile);
+        const trackId = `track_${Date.now()}`;
+
+        showToast('Uploading track chunks to database... ⏳');
+
+        // 1. Upload chunked Base64 slices into tracks/{trackId}/chunks with live progress
+        await uploadAudioChunksToFirestore(trackId, selectedFile, (percent, current, total) => {
+          setUploadProgress({ percent, current, total });
+        });
+
+        // 2. Cache in local device IndexedDB for instant playback
+        finalAudioUrl = await storeAudioBlob(trackId, selectedFile, cleanTitle, cleanArtist);
+        firestoreAudioUrl = `firestore://${trackId}`;
+
+        // 3. Save track doc to Firestore with explicit trackId
+        await setDoc(doc(db, 'tracks', trackId), {
+          title: cleanTitle.slice(0, 100),
+          artist: cleanArtist.slice(0, 100),
+          audioUrl: firestoreAudioUrl,
+          sourceType,
+          duration,
+          createdAt: new Date().toISOString(),
+        });
+      } else {
+        const trackId = `track_${Date.now()}`;
+        await setDoc(doc(db, 'tracks', trackId), {
+          title: cleanTitle.slice(0, 100),
+          artist: cleanArtist.slice(0, 100),
+          audioUrl: firestoreAudioUrl,
+          sourceType,
+          duration: 0,
+          createdAt: new Date().toISOString(),
+        });
       }
 
-      // Add to Firestore tracks collection on server
-      await addDoc(collection(db, 'tracks'), {
-        title: cleanTitle.slice(0, 100),
-        artist: cleanArtist.slice(0, 100),
-        audioUrl: firestoreAudioUrl,
-        sourceType,
-        duration,
-        createdAt: new Date().toISOString(),
-      });
-
-      // Update active song with direct Firebase Storage URL
+      // Update active song across all connected clients & devices
       onSetActiveSong(cleanTitle, cleanArtist, finalAudioUrl);
       onSetFavSong(cleanTitle);
 
@@ -370,12 +391,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       showToast('Failed to save audio track');
     } finally {
       setIsUploadingTrack(false);
+      setUploadProgress(null);
     }
   };
 
   const handleActivateTrack = async (track: AudioTrack) => {
     sound.playClick();
-    onSetActiveSong(track.title, track.artist, track.audioUrl);
+    
+    // Resolve audio url for local player immediately (handles firestore:// chunks)
+    const resolved = await getStoredAudioUrl(track.audioUrl);
+    onSetActiveSong(track.title, track.artist, resolved || track.audioUrl);
     onSetFavSong(track.title);
 
     await saveGlobalSettingsToFirestore({
@@ -389,11 +414,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   };
 
   const handleDeleteTrack = async (trackId: string) => {
-    if (!window.confirm('Delete this track from database?')) return;
     sound.playPop();
     try {
       await deleteDoc(doc(db, 'tracks', trackId));
-      showToast('Track deleted');
+      setConfirmDeleteId(null);
+      showToast('Track deleted from database');
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `tracks/${trackId}`);
       showToast('Failed to delete track');
@@ -693,8 +718,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      <span>{isUploadingTrack ? 'Saving track...' : 'Save & Set Active Track'}</span>
+                      <span>{isUploadingTrack ? 'Uploading chunks to database...' : 'Save & Set Active Track'}</span>
                     </button>
+
+                    {uploadProgress && (
+                      <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 space-y-1.5">
+                        <div className="flex justify-between text-[11px] font-mono text-purple-200">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping inline-block" />
+                            Uploading to database...
+                          </span>
+                          <span>{uploadProgress.percent}% (Chunk {uploadProgress.current}/{uploadProgress.total})</span>
+                        </div>
+                        <div className="w-full h-2 bg-black/50 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-indigo-400 transition-all duration-300"
+                            style={{ width: `${uploadProgress.percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </form>
 
                   {/* Saved Tracks Catalog */}
@@ -736,22 +779,43 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               </div>
 
                               <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleActivateTrack(trk)}
-                                  className="p-1.5 rounded-lg bg-purple-600/40 hover:bg-purple-600 text-purple-200 hover:text-white transition-colors cursor-pointer"
-                                  title="Activate this song"
-                                >
-                                  <Play className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTrack(trk.id)}
-                                  className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 transition-colors cursor-pointer"
-                                  title="Delete track"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                {confirmDeleteId === trk.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteTrack(trk.id)}
+                                      className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-mono font-bold cursor-pointer"
+                                    >
+                                      Confirm
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmDeleteId(null)}
+                                      className="px-1.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-zinc-400 text-[10px] font-mono cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleActivateTrack(trk)}
+                                      className="p-1.5 rounded-lg bg-purple-600/40 hover:bg-purple-600 text-purple-200 hover:text-white transition-colors cursor-pointer"
+                                      title="Play & Activate this song"
+                                    >
+                                      <Play className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmDeleteId(trk.id)}
+                                      className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 transition-colors cursor-pointer"
+                                      title="Delete track"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );

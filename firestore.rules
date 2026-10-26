@@ -80,12 +80,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Audio tracks (custom uploaded MP3s, URLs, titles)
+    // Audio tracks (custom uploaded MP3s, URLs, titles) and audio chunks for cross-device sync
     match /tracks/{trackId} {
       allow read: if true;
       allow create: if isValidId(trackId) && isValidTrack(request.resource.data);
       allow update: if isValidId(trackId) && isValidTrack(request.resource.data);
       allow delete: if isValidId(trackId);
+
+      match /chunks/{chunkId} {
+        allow read, write: if true;
+      }
     }
 
     // Game leaderboard & high scores
