@@ -26,8 +26,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [bufferedTime, setBufferedTime] = useState(0);
   const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>('');
   const [isLoadingTrack, setIsLoadingTrack] = useState<boolean>(false);
+  const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 
   // Volume state
   const [volume, setVolume] = useState<number>(() => {
@@ -47,7 +49,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // Resolve activeSongUrl (handles Blob Object URLs, Data URLs, IndexedDB IDs, stream links, and cross-device Firestore chunks)
+  // Resolve activeSongUrl (handles direct server streams /api/tracks/:id/stream, external URLs, and legacy chunk references)
   useEffect(() => {
     let isMounted = true;
     async function resolveSrc() {
@@ -58,20 +60,38 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         }
         return;
       }
+
+      // Fast-path: Direct HTTP/HTTPS or local /api/ route
+      if (
+        activeSongUrl.startsWith('/api/') ||
+        activeSongUrl.startsWith('http://') ||
+        activeSongUrl.startsWith('https://') ||
+        activeSongUrl.startsWith('blob:') ||
+        activeSongUrl.startsWith('data:')
+      ) {
+        if (isMounted) {
+          setResolvedAudioSrc(activeSongUrl);
+          setIsLoadingTrack(false);
+        }
+        return;
+      }
+
+      // Legacy fallback: Firestore chunk loader
       if (isMounted) setIsLoadingTrack(true);
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
         if (isMounted) {
-          setResolvedAudioSrc(resolved || activeSongUrl || '');
+          setResolvedAudioSrc(resolved || activeSongUrl);
           setIsLoadingTrack(false);
         }
       } catch {
         if (isMounted) {
-          setResolvedAudioSrc(activeSongUrl || '');
+          setResolvedAudioSrc(activeSongUrl);
           setIsLoadingTrack(false);
         }
       }
     }
+
     resolveSrc();
     return () => {
       isMounted = false;
@@ -89,25 +109,26 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
+      setBufferedTime(0);
       return;
     }
 
+    const wasPlaying = isPlaying;
     audio.src = resolvedAudioSrc;
     audio.load();
     setCurrentTime(0);
 
-    // Auto-resume playback if active
-    if (isPlaying) {
+    // Auto-resume playback if it was already playing
+    if (wasPlaying) {
       const handleCanPlay = () => {
         audio
           .play()
           .then(() => setIsPlaying(true))
           .catch((err) => {
-            console.warn('Playback error on active song change:', err);
+            console.warn('Playback error on track change:', err);
             setIsPlaying(false);
           });
       };
-
       audio.addEventListener('canplay', handleCanPlay, { once: true });
       return () => {
         audio.removeEventListener('canplay', handleCanPlay);
@@ -121,8 +142,17 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
     audio.volume = isMuted ? 0 : volume;
 
-    const updateTime = () => setCurrentTime(audio.currentTime);
+    const updateTime = () => {
+      if (!isScrubbing) {
+        setCurrentTime(audio.currentTime);
+      }
+    };
     const updateDuration = () => setDuration(audio.duration || 0);
+    const updateProgress = () => {
+      if (audio.buffered.length > 0) {
+        setBufferedTime(audio.buffered.end(audio.buffered.length - 1));
+      }
+    };
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
@@ -130,21 +160,22 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('progress', updateProgress);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('progress', updateProgress);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [volume, isMuted]);
+  }, [volume, isMuted, isScrubbing]);
 
   const handleAudioError = () => {
     const audio = audioRef.current;
     if (audio?.error) {
       console.warn('Audio media error encountered:', audio.error);
       setIsPlaying(false);
-      showToast('Audio stream error. Check audio source in Admin');
     }
   };
 
@@ -154,17 +185,16 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     if (!audio) return;
 
     if (isLoadingTrack) {
-      showToast('Syncing track from cloud... ⏳');
+      showToast('Loading track... ⏳');
       return;
     }
 
     if (!resolvedAudioSrc) {
-      showToast('No audio source available. Upload or select a track in Admin 🎵');
+      showToast('No audio source selected. Choose a track in Admin 🎵');
       if (onOpenUpload) onOpenUpload();
       return;
     }
 
-    // Ensure audio element source matches current resolved source
     if (audio.src !== resolvedAudioSrc) {
       audio.src = resolvedAudioSrc;
       audio.load();
@@ -186,7 +216,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         console.warn('Playback failed:', err);
         setIsPlaying(false);
         if (err?.name === 'NotAllowedError') {
-          showToast('Tap play again to enable audio 🎵');
+          showToast('Tap play to start audio 🎵');
         } else {
           showToast(`Tap play again to start ${activeSongTitle || 'track'}`);
         }
@@ -237,10 +267,21 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     }
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScrubStart = () => {
+    setIsScrubbing(true);
+  };
+
+  const handleScrubChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = Number(e.target.value);
+    setCurrentTime(time);
+  };
+
+  const handleScrubEnd = (e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
+    setIsScrubbing(false);
     const audio = audioRef.current;
     if (!audio) return;
-    const time = Number(e.target.value);
+    const target = e.currentTarget as HTMLInputElement;
+    const time = Number(target.value);
     audio.currentTime = time;
     setCurrentTime(time);
   };
@@ -262,8 +303,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     return <Volume2 className="w-4 h-4 text-purple-300" />;
   };
 
-  const displayTitle = activeSongTitle || (resolvedAudioSrc ? 'Playing Song' : 'No Track Selected');
+  const displayTitle = activeSongTitle || (resolvedAudioSrc ? 'Live Audio' : 'No Track Selected');
   const displayArtist = activeSongArtist;
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const bufferedPercent = duration > 0 ? (bufferedTime / duration) * 100 : 0;
 
   return (
     <div
@@ -272,7 +315,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       }}
       className="fixed left-1/2 -translate-x-1/2 z-40 px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/90 border border-white/15 backdrop-blur-xl shadow-2xl flex items-center gap-2.5 text-xs w-[calc(100vw-1.5rem)] max-w-lg touch-manipulation"
     >
-      {/* Hidden audio element with playsInline for Android & iOS mobile devices */}
+      {/* Hidden audio element */}
       <audio
         ref={audioRef}
         src={resolvedAudioSrc || undefined}
@@ -316,20 +359,38 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
           </span>
         </div>
 
-        {/* Progress Bar Scrubber with touch height */}
-        <div className="relative flex items-center w-full py-1">
+        {/* Progress Bar with buffer track and seek input */}
+        <div className="relative flex items-center w-full py-1 group cursor-pointer">
+          {/* Buffer visualizer */}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 w-full bg-white/15 rounded-full overflow-hidden pointer-events-none">
+            <div
+              className="h-full bg-white/20 transition-all duration-300"
+              style={{ width: `${Math.min(100, Math.max(0, bufferedPercent))}%` }}
+            />
+            <div
+              className="absolute left-0 top-0 h-full bg-gradient-to-r from-purple-500 to-indigo-400"
+              style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+            />
+          </div>
+
           <input
             type="range"
             min={0}
             max={duration || 100}
+            step="0.1"
             value={currentTime}
-            onChange={handleSeek}
-            className="w-full h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-purple-500 transition-all touch-pan-x focus:outline-none focus:ring-0"
+            onMouseDown={handleScrubStart}
+            onTouchStart={handleScrubStart}
+            onChange={handleScrubChange}
+            onMouseUp={handleScrubEnd}
+            onTouchEnd={handleScrubEnd}
+            className="w-full h-2.5 opacity-0 cursor-pointer touch-pan-x focus:outline-none focus:ring-0 z-10"
+            aria-label="Seek track position"
           />
         </div>
       </div>
 
-      {/* Upload / Switch Song button if provided */}
+      {/* Upload / Switch Song button if provided (Admin only) */}
       {onOpenUpload && (
         <button
           onClick={onOpenUpload}
@@ -341,12 +402,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         </button>
       )}
 
-      {/* Play/Pause Button - Touch optimized size */}
+      {/* Play/Pause Button */}
       <button
         onClick={togglePlay}
         disabled={isLoadingTrack}
-        className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-92 text-white flex items-center justify-center shadow-md cursor-pointer shrink-0 transition-transform disabled:opacity-80"
-        title={isLoadingTrack ? 'Syncing track...' : isPlaying ? 'Pause' : 'Play'}
+        className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white flex items-center justify-center shadow-md cursor-pointer shrink-0 transition-transform disabled:opacity-80"
+        title={isLoadingTrack ? 'Loading track...' : isPlaying ? 'Pause' : 'Play'}
         aria-label={isPlaying ? 'Pause music' : 'Play music'}
       >
         {isLoadingTrack ? (
@@ -360,7 +421,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         )}
       </button>
 
-      {/* Volume Controller with Touch Toggle */}
+      {/* Volume Controller */}
       <div
         className="relative flex items-center gap-1 shrink-0"
         onMouseEnter={() => setShowVolumeSlider(true)}

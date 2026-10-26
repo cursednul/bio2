@@ -54,6 +54,7 @@ export interface GlobalSettingsDoc {
   bioEmoticon?: string;
   nickname?: string;
   avatarUrl?: string;
+  activeSongId?: string;
   activeSongTitle?: string;
   activeSongArtist?: string;
   activeSongUrl?: string;
