@@ -61,6 +61,21 @@ export async function storeAudioBlob(id: string, file: Blob, title: string, arti
   }
 }
 
+export async function deleteAudioBlob(id: string): Promise<boolean> {
+  try {
+    const database = await openDB();
+    return new Promise((resolve) => {
+      const tx = database.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.delete(id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch {
+    return false;
+  }
+}
+
 // Uploads audio to Firestore in 400KB chunks so any device can stream it
 export async function uploadAudioChunksToFirestore(
   trackId: string,

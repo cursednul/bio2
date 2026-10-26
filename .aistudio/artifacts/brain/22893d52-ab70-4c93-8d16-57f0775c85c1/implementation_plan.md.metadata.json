@@ -1,6 +1,6 @@
 {
-  "summary":  "Complete architectural plan for replacing the fragile audio chunking system with a high-performance Express server-backed audio upload and streaming pipeline. Includes multipart track uploads, HTTP byte-range audio streaming for instant seek scrubbing and cross-device playback, an upgraded floating player bar with seek scrubber and volume controls, and a secure Admin music catalog for activating, previewing, and deleting tracks.",
-  "updatedAt":  "2026-10-26T09:33:26.264868784Z",
+  "summary":  "Implementation plan for upgrading the app to a Google Account linked admin system using Firebase Google Auth with email whitelisting.",
+  "updatedAt":  "2026-10-26T10:09:14.640986103Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

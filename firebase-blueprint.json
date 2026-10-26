@@ -81,6 +81,11 @@
           "maxLength": 512,
           "description": "Custom avatar image URL"
         },
+        "activeSongId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Active audio track ID"
+        },
         "activeSongTitle": {
           "type": "string",
           "maxLength": 100,

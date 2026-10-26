@@ -18,7 +18,7 @@ service cloud.firestore {
     }
 
     function isValidGlobalSettings(data) {
-      return data.keys().hasOnly(['socialsViewMode', 'favGame', 'favSong', 'announcement', 'announcementActive', 'motionPreset', 'bioEmoticon', 'nickname', 'avatarUrl', 'activeSongTitle', 'activeSongArtist', 'activeSongUrl', 'updatedAt']) &&
+      return data.keys().hasOnly(['socialsViewMode', 'favGame', 'favSong', 'announcement', 'announcementActive', 'motionPreset', 'bioEmoticon', 'nickname', 'avatarUrl', 'activeSongId', 'activeSongTitle', 'activeSongArtist', 'activeSongUrl', 'updatedAt']) &&
              (!('socialsViewMode' in data) || data.socialsViewMode in ['cards', 'dock', 'grid']) &&
              (!('favGame' in data) || (data.favGame is string && data.favGame.size() <= 64)) &&
              (!('favSong' in data) || (data.favSong is string && data.favSong.size() <= 64)) &&
@@ -28,9 +28,11 @@ service cloud.firestore {
              (!('bioEmoticon' in data) || (data.bioEmoticon is string && data.bioEmoticon.size() <= 32)) &&
              (!('nickname' in data) || (data.nickname is string && data.nickname.size() <= 32)) &&
              (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512)) &&
+             (!('activeSongId' in data) || (data.activeSongId is string && data.activeSongId.size() <= 128)) &&
              (!('activeSongTitle' in data) || (data.activeSongTitle is string && data.activeSongTitle.size() <= 100)) &&
              (!('activeSongArtist' in data) || (data.activeSongArtist is string && data.activeSongArtist.size() <= 100)) &&
-             (!('activeSongUrl' in data) || (data.activeSongUrl is string && data.activeSongUrl.size() <= 1000000));
+             (!('activeSongUrl' in data) || (data.activeSongUrl is string && data.activeSongUrl.size() <= 1000000)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
     function isValidTrack(data) {

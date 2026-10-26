@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, MessageSquare, ShieldCheck, Megaphone, Gamepad2, Plus } from 'lucide-react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db, auth, signOut, onAuthStateChanged, handleFirestoreError, OperationType } from './firebase';
 import { BackgroundCanvas } from './components/BackgroundCanvas';
 import { ProfileCard } from './components/ProfileCard';
 import { SocialLinks } from './components/SocialLinks';
@@ -64,12 +64,10 @@ export default function App() {
   const [favGame, setFavGame] = useState<string>('Watch Dogs 2');
   const [favSong, setFavSong] = useState<string>('Cyberpunk Synthwave');
 
-  // Live Audio Player Song Details - CORS-friendly fallback that never 403s in preview or prod
-  const [activeSongTitle, setActiveSongTitle] = useState<string>('Cyberpunk Ambient');
+  // Live Audio Player Song Details - 100% locally hosted asset that never 404s/403s
+  const [activeSongTitle, setActiveSongTitle] = useState<string>('Phantom Ambient');
   const [activeSongArtist, setActiveSongArtist] = useState<string>('cursed');
-  const [activeSongUrl, setActiveSongUrl] = useState<string>(
-    'https://actions.google.com/sounds/v1/ambiences/synth_drone.ogg'
-  );
+  const [activeSongUrl, setActiveSongUrl] = useState<string>('/audio/ambient_track.mp3');
 
   // Profile Customization
   const [nickname, setNickname] = useState<string>('cursed');
@@ -109,8 +107,8 @@ export default function App() {
           if (data.activeSongTitle) setActiveSongTitle(data.activeSongTitle);
           if (data.activeSongArtist) setActiveSongArtist(data.activeSongArtist);
           if (data.activeSongUrl !== undefined) {
-            if (data.activeSongUrl.includes('pixabay.com')) {
-              setActiveSongUrl('https://actions.google.com/sounds/v1/ambiences/synth_drone.ogg');
+            if (data.activeSongUrl.includes('pixabay.com') || data.activeSongUrl.includes('synth_drone.ogg')) {
+              setActiveSongUrl('/audio/ambient_track.mp3');
             } else {
               setActiveSongUrl(data.activeSongUrl);
             }
@@ -122,16 +120,16 @@ export default function App() {
             {
               socialsViewMode: 'cards',
               favGame: 'Watch Dogs 2',
-              favSong: 'Cyberpunk Ambient',
+              favSong: 'Phantom Ambient',
               announcement: 'Welcome to cursed · Connect on Telegram, TikTok & Discord',
               announcementActive: false,
               motionPreset: 'flow',
               nickname: 'cursed',
               bioEmoticon: '(˶>⩊<˶)',
               avatarUrl: '',
-              activeSongTitle: 'Cyberpunk Ambient',
+              activeSongTitle: 'Phantom Ambient',
               activeSongArtist: 'cursed',
-              activeSongUrl: 'https://actions.google.com/sounds/v1/ambiences/synth_drone.ogg',
+              activeSongUrl: '/audio/ambient_track.mp3',
               updatedAt: new Date().toISOString(),
             },
             { merge: true }
@@ -146,6 +144,21 @@ export default function App() {
     );
 
     return () => unsubscribe();
+  }, []);
+
+  // Listen for Google Authentication state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user?.email && user.email.toLowerCase() === 'kirya2010777@gmail.com') {
+        setIsAdmin(true);
+        try {
+          sessionStorage.setItem('cursed_admin_auth', 'true');
+        } catch {
+          // Ignore
+        }
+      }
+    });
+    return () => unsub();
   }, []);
 
   const motionScale = motionPreset === 'calm' ? 0.4 : motionPreset === 'hyper' ? 1.6 : 1.0;
@@ -186,8 +199,13 @@ export default function App() {
     }
   };
 
-  const handleAdminLogout = () => {
+  const handleAdminLogout = async () => {
     setIsAdmin(false);
+    try {
+      await signOut(auth);
+    } catch {
+      // Ignore
+    }
     try {
       sessionStorage.removeItem('cursed_admin_auth');
     } catch {
@@ -278,7 +296,7 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen text-zinc-100 relative selection:bg-purple-500/30 selection:text-white transition-colors duration-700 pb-36 sm:pb-32"
+      className="min-h-screen text-zinc-100 relative selection:bg-purple-500/30 selection:text-white transition-colors duration-700 pb-[calc(7.5rem+env(safe-area-inset-bottom,12px))] overflow-x-hidden"
       style={{ backgroundColor: theme.bgDark }}
     >
       {/* Loading Overlay */}
@@ -303,9 +321,9 @@ export default function App() {
       )}
 
       {/* Top Bar */}
-      <header className="relative z-30 w-full max-w-5xl mx-auto px-3.5 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-3 sm:gap-6 border-b border-white/5">
+      <header className="relative z-30 w-full max-w-5xl mx-auto px-3 sm:px-6 py-2.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-6 border-b border-white/5">
         {/* Zone 1: Wordmark with 10-click secret trigger */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <a
             href="/"
             onClick={(e) => {
@@ -313,7 +331,7 @@ export default function App() {
               sound.playChime();
               setActiveTab('socials');
             }}
-            className="text-lg md:text-xl font-bold tracking-tight text-white whitespace-nowrap shrink-0 group flex items-center gap-1.5"
+            className="text-base sm:text-xl font-bold tracking-tight text-white whitespace-nowrap shrink-0 group flex items-center gap-1 sm:gap-1.5"
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
             <span
@@ -333,7 +351,7 @@ export default function App() {
                 setAdminModalInitialTab('general');
                 setIsAdminModalOpen(true);
               }}
-              className="px-2 py-0.5 min-h-[28px] rounded-full bg-emerald-950/70 border border-emerald-500/40 text-[10px] font-mono text-emerald-300 flex items-center gap-1 cursor-pointer shadow-sm hover:bg-emerald-900/60 transition-colors"
+              className="px-1.5 sm:px-2 py-0.5 min-h-[24px] sm:min-h-[28px] rounded-full bg-emerald-950/70 border border-emerald-500/40 text-[9px] sm:text-[10px] font-mono text-emerald-300 flex items-center gap-1 cursor-pointer shadow-sm hover:bg-emerald-900/60 transition-colors"
               title="Open Admin Suite"
             >
               <ShieldCheck className="w-3 h-3 text-emerald-400" />
@@ -342,8 +360,8 @@ export default function App() {
           )}
         </div>
 
-        {/* Zone 2: Navigation Links (Clean 3 Tabs) */}
-        <nav className="flex items-center gap-1 p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+        {/* Zone 2: Navigation Links (Clean 2 Tabs) */}
+        <nav className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -353,7 +371,7 @@ export default function App() {
                   sound.playClick();
                   setActiveTab(tab.id);
                 }}
-                className={`relative px-3 sm:px-4 py-2 min-h-[40px] rounded-xl text-xs font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors cursor-pointer touch-manipulation ${
+                className={`relative px-2.5 sm:px-4 py-1.5 sm:py-2 min-h-[36px] sm:min-h-[40px] rounded-xl text-xs font-medium whitespace-nowrap flex items-center gap-1 sm:gap-1.5 transition-colors cursor-pointer touch-manipulation ${
                   isActive ? 'text-white' : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -364,7 +382,7 @@ export default function App() {
                     className="absolute inset-0 rounded-xl bg-purple-600/80 shadow-md border border-purple-400/30"
                   />
                 )}
-                <span className="relative z-10 flex items-center gap-1.5">
+                <span className="relative z-10 flex items-center gap-1 sm:gap-1.5">
                   {tab.icon}
                   <span>{tab.label}</span>
                 </span>
@@ -378,7 +396,7 @@ export default function App() {
           {isAdmin ? (
             <button
               onClick={() => setIsAdminModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 text-xs font-medium transition-all cursor-pointer shadow-md"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/40 text-xs font-medium transition-all cursor-pointer shadow-md"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Admin Suite</span>
@@ -392,7 +410,7 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="relative z-20 max-w-4xl mx-auto px-4 pt-6 sm:pt-8 flex flex-col items-center">
+      <main className="relative z-20 w-full max-w-4xl mx-auto px-3 sm:px-4 pt-4 sm:pt-8 flex flex-col items-center">
         {/* Central 3D Interactive Profile Card */}
         <ProfileCard
           theme={theme}

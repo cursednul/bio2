@@ -48,22 +48,46 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [prevVolume, setPrevVolume] = useState(0.8);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const fallbackAttemptedRef = useRef(false);
+  const volumeContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Resolve activeSongUrl (handles direct server streams /api/tracks/:id/stream, external URLs, and legacy chunk references)
+  // Close floating volume slider when tapping/clicking outside
+  useEffect(() => {
+    if (!showVolumeSlider) return;
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+      if (
+        volumeContainerRef.current &&
+        !volumeContainerRef.current.contains(e.target as Node)
+      ) {
+        setShowVolumeSlider(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [showVolumeSlider]);
+
+  // Resolve activeSongUrl (handles direct server streams, local /audio/ assets, external URLs, and legacy chunk references)
   useEffect(() => {
     let isMounted = true;
+    fallbackAttemptedRef.current = false;
+
     async function resolveSrc() {
       if (!activeSongUrl || !activeSongUrl.trim()) {
         if (isMounted) {
-          setResolvedAudioSrc('');
+          setResolvedAudioSrc('/audio/ambient_track.mp3');
           setIsLoadingTrack(false);
         }
         return;
       }
 
-      // Fast-path: Direct HTTP/HTTPS or local /api/ route
+      // Fast-path: Direct HTTP/HTTPS, local /audio/ or /api/ route, blob or data URL
       if (
         activeSongUrl.startsWith('/api/') ||
+        activeSongUrl.startsWith('/audio/') ||
         activeSongUrl.startsWith('http://') ||
         activeSongUrl.startsWith('https://') ||
         activeSongUrl.startsWith('blob:') ||
@@ -81,12 +105,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       try {
         const resolved = await getStoredAudioUrl(activeSongUrl);
         if (isMounted) {
-          setResolvedAudioSrc(resolved || activeSongUrl);
+          setResolvedAudioSrc(resolved || '/audio/ambient_track.mp3');
           setIsLoadingTrack(false);
         }
       } catch {
         if (isMounted) {
-          setResolvedAudioSrc(activeSongUrl);
+          setResolvedAudioSrc('/audio/ambient_track.mp3');
           setIsLoadingTrack(false);
         }
       }
@@ -110,6 +134,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       setCurrentTime(0);
       setDuration(0);
       setBufferedTime(0);
+      return;
+    }
+
+    // Don't reload if the audio element is already loaded with this track
+    const currentAttr = audio.getAttribute('src');
+    if (currentAttr === resolvedAudioSrc || (resolvedAudioSrc && audio.src && (audio.src === resolvedAudioSrc || audio.src.endsWith(resolvedAudioSrc)))) {
       return;
     }
 
@@ -174,8 +204,14 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   const handleAudioError = () => {
     const audio = audioRef.current;
     if (audio?.error) {
-      console.warn('Audio media error encountered:', audio.error);
+      console.warn('Audio media error encountered:', audio.error.message || audio.error.code);
       setIsPlaying(false);
+
+      // If the current audio source failed and we haven't tried the bundled fallback yet, switch
+      if (!fallbackAttemptedRef.current && resolvedAudioSrc !== '/audio/ambient_track.mp3') {
+        fallbackAttemptedRef.current = true;
+        setResolvedAudioSrc('/audio/ambient_track.mp3');
+      }
     }
   };
 
@@ -189,14 +225,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       return;
     }
 
-    if (!resolvedAudioSrc) {
-      showToast('No audio source selected. Choose a track in Admin 🎵');
-      if (onOpenUpload) onOpenUpload();
-      return;
-    }
+    const currentSrc = resolvedAudioSrc || '/audio/ambient_track.mp3';
 
-    if (audio.src !== resolvedAudioSrc) {
-      audio.src = resolvedAudioSrc;
+    if (!audio.src || (audio.getAttribute('src') !== currentSrc && audio.src !== currentSrc)) {
+      audio.src = currentSrc;
       audio.load();
     }
 
@@ -215,7 +247,11 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       } catch (err: any) {
         console.warn('Playback failed:', err);
         setIsPlaying(false);
-        if (err?.name === 'NotAllowedError') {
+        if (!fallbackAttemptedRef.current && resolvedAudioSrc !== '/audio/ambient_track.mp3') {
+          fallbackAttemptedRef.current = true;
+          setResolvedAudioSrc('/audio/ambient_track.mp3');
+          showToast('Loaded backup track 🎵');
+        } else if (err?.name === 'NotAllowedError') {
           showToast('Tap play to start audio 🎵');
         } else {
           showToast(`Tap play again to start ${activeSongTitle || 'track'}`);
@@ -224,15 +260,10 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     }
   };
 
-  const toggleMuteOrSlider = () => {
+  const toggleMute = () => {
     sound.playClick();
     const audio = audioRef.current;
     if (!audio) return;
-
-    if (!showVolumeSlider) {
-      setShowVolumeSlider(true);
-      return;
-    }
 
     if (isMuted || volume === 0) {
       const restore = prevVolume > 0 ? prevVolume : 0.8;
@@ -241,7 +272,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       audio.volume = restore;
       showToast(`Volume: ${Math.round(restore * 100)}%`);
     } else {
-      setPrevVolume(volume);
+      setPrevVolume(volume > 0 ? volume : 0.8);
       setIsMuted(true);
       setVolume(0);
       audio.volume = 0;
@@ -305,15 +336,15 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
 
   const displayTitle = activeSongTitle || (resolvedAudioSrc ? 'Live Audio' : 'No Track Selected');
   const displayArtist = activeSongArtist;
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const bufferedPercent = duration > 0 ? (bufferedTime / duration) * 100 : 0;
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+  const bufferedPercent = duration > 0 ? Math.min(100, Math.max(0, (bufferedTime / duration) * 100)) : 0;
 
   return (
     <div
       style={{
-        bottom: 'max(0.75rem, env(safe-area-inset-bottom, 12px))',
+        bottom: 'max(0.65rem, env(safe-area-inset-bottom, 10px))',
       }}
-      className="fixed left-1/2 -translate-x-1/2 z-40 px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/90 border border-white/15 backdrop-blur-xl shadow-2xl flex items-center gap-2.5 text-xs w-[calc(100vw-1.5rem)] max-w-lg touch-manipulation"
+      className="fixed left-1/2 -translate-x-1/2 z-40 px-2.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/92 border border-white/15 backdrop-blur-2xl shadow-2xl flex items-center gap-2 sm:gap-2.5 text-xs w-[calc(100vw-1.25rem)] sm:w-[calc(100vw-2rem)] max-w-lg touch-manipulation select-none"
     >
       {/* Hidden audio element */}
       <audio
@@ -329,9 +360,9 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       <motion.div
         animate={{ rotate: isPlaying && !isMuted && volume > 0 ? 360 : 0 }}
         transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
-        className="w-8 h-8 rounded-full bg-purple-950/70 border border-purple-400/30 flex items-center justify-center shrink-0 text-purple-300 shadow-sm"
+        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center justify-center shrink-0 text-purple-300 shadow-sm"
       >
-        <Disc3 className="w-4.5 h-4.5" />
+        <Disc3 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
       </motion.div>
 
       {/* Track Details & Scrubber */}
@@ -339,13 +370,13 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         <div className="flex items-center justify-between gap-1 mb-1">
           <div className="flex items-center gap-1.5 truncate">
             <span
-              className="font-semibold text-zinc-100 text-xs truncate max-w-[130px] sm:max-w-[200px]"
+              className="font-semibold text-zinc-100 text-[11px] sm:text-xs truncate max-w-[110px] xs:max-w-[160px] sm:max-w-[210px]"
               title={displayTitle}
             >
               {displayTitle}
             </span>
             {displayArtist && (
-              <span className="text-[10px] text-zinc-400 truncate hidden sm:inline">
+              <span className="text-[10px] text-zinc-400 truncate hidden xs:inline sm:inline">
                 · {displayArtist}
               </span>
             )}
@@ -354,24 +385,26 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
             )}
           </div>
 
-          <span className="text-[10px] font-mono text-zinc-400 shrink-0">
+          <span className="text-[10px] font-mono text-zinc-400 shrink-0 tabular-nums">
             {formatTime(currentTime)} / {formatTime(duration || 0)}
           </span>
         </div>
 
         {/* Progress Bar with buffer track and seek input */}
-        <div className="relative flex items-center w-full py-1 group cursor-pointer">
+        <div className="relative flex items-center w-full h-5 cursor-pointer">
           {/* Buffer visualizer */}
           <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 w-full bg-white/15 rounded-full overflow-hidden pointer-events-none">
             <div
               className="h-full bg-white/20 transition-all duration-300"
-              style={{ width: `${Math.min(100, Math.max(0, bufferedPercent))}%` }}
+              style={{ width: `${bufferedPercent}%` }}
             />
             <div
               className="absolute left-0 top-0 h-full bg-gradient-to-r from-purple-500 to-indigo-400"
-              style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
+
+
 
           <input
             type="range"
@@ -384,7 +417,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
             onChange={handleScrubChange}
             onMouseUp={handleScrubEnd}
             onTouchEnd={handleScrubEnd}
-            className="w-full h-2.5 opacity-0 cursor-pointer touch-pan-x focus:outline-none focus:ring-0 z-10"
+            className="w-full h-6 opacity-0 cursor-pointer touch-none focus:outline-none focus:ring-0 z-10"
             aria-label="Seek track position"
           />
         </div>
@@ -406,7 +439,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       <button
         onClick={togglePlay}
         disabled={isLoadingTrack}
-        className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white flex items-center justify-center shadow-md cursor-pointer shrink-0 transition-transform disabled:opacity-80"
+        className="w-8 h-8 sm:w-8 sm:h-8 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white flex items-center justify-center shadow-md cursor-pointer shrink-0 transition-transform disabled:opacity-80"
         title={isLoadingTrack ? 'Loading track...' : isPlaying ? 'Pause' : 'Play'}
         aria-label={isPlaying ? 'Pause music' : 'Play music'}
       >
@@ -421,30 +454,38 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         )}
       </button>
 
-      {/* Volume Controller */}
-      <div
-        className="relative flex items-center gap-1 shrink-0"
-        onMouseEnter={() => setShowVolumeSlider(true)}
-      >
+      {/* Floating Volume Controller Popover */}
+      <div ref={volumeContainerRef} className="relative flex items-center shrink-0">
         <button
-          onClick={toggleMuteOrSlider}
-          className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-white/5 active:bg-white/15 hover:bg-white/10 text-zinc-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-          title={isMuted || volume === 0 ? 'Unmute' : 'Volume'}
+          onClick={() => {
+            sound.playClick();
+            setShowVolumeSlider((prev) => !prev);
+          }}
+          className="w-8 h-8 rounded-xl bg-white/5 active:bg-white/15 hover:bg-white/10 text-zinc-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+          title={isMuted || volume === 0 ? 'Unmute / Volume' : 'Volume'}
           aria-label="Volume controller"
         >
           {renderVolumeIcon()}
         </button>
 
-        {/* Volume Slider Drawer */}
+        {/* Floating Popover: Does not shift or crush the player bar on mobile */}
         <AnimatePresence>
           {showVolumeSlider && (
             <motion.div
-              initial={{ opacity: 0, width: 0, scale: 0.95 }}
-              animate={{ opacity: 1, width: '88px', scale: 1 }}
-              exit={{ opacity: 0, width: 0, scale: 0.95 }}
+              initial={{ opacity: 0, y: 8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="flex items-center gap-1 overflow-hidden pl-1"
+              className="absolute bottom-full right-0 mb-3 px-3 py-2.5 rounded-2xl bg-zinc-950/95 border border-purple-500/30 backdrop-blur-2xl shadow-2xl flex items-center gap-2.5 z-50 text-xs min-w-[170px]"
             >
+              <button
+                onClick={toggleMute}
+                className="p-1 rounded-lg hover:bg-white/10 text-zinc-300 hover:text-white cursor-pointer shrink-0"
+                title={isMuted || volume === 0 ? 'Unmute' : 'Mute'}
+                aria-label="Mute toggle"
+              >
+                {renderVolumeIcon()}
+              </button>
               <input
                 type="range"
                 min="0"
@@ -452,13 +493,16 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
                 step="0.01"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-16 h-1.5 bg-white/25 rounded-full appearance-none cursor-pointer accent-purple-500 transition-all touch-pan-x focus:outline-none focus:ring-0"
+                className="w-20 sm:w-24 h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-purple-500 touch-pan-x focus:outline-none"
                 title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
               />
+              <span className="font-mono text-[10px] text-zinc-400 w-8 text-right tabular-nums shrink-0">
+                {Math.round((isMuted ? 0 : volume) * 100)}%
+              </span>
               <button
                 onClick={() => setShowVolumeSlider(false)}
-                className="text-[10px] font-mono text-zinc-400 hover:text-white cursor-pointer px-1"
-                title="Close volume"
+                className="text-[11px] font-mono text-zinc-400 hover:text-white cursor-pointer p-0.5 rounded hover:bg-white/10 shrink-0"
+                title="Close volume slider"
               >
                 ✕
               </button>

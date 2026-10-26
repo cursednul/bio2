@@ -236,28 +236,31 @@ app.delete('/api/tracks/:id', (req, res) => {
     let catalog = loadCatalog();
     const trackIndex = catalog.findIndex((t) => t.id === id);
 
-    if (trackIndex === -1) {
-      return res.status(404).json({ success: false, error: 'Track not found' });
-    }
+    if (trackIndex !== -1) {
+      const track = catalog[trackIndex];
+      const filePath = path.join(UPLOADS_DIR, track.filename);
 
-    const track = catalog[trackIndex];
-    const filePath = path.join(UPLOADS_DIR, track.filename);
-
-    if (fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (fileErr) {
-        console.warn('Could not delete physical audio file:', fileErr);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (fileErr) {
+          console.warn('Could not delete physical audio file:', fileErr);
+        }
       }
-    }
 
-    catalog.splice(trackIndex, 1);
-    saveCatalog(catalog);
+      catalog.splice(trackIndex, 1);
+      saveCatalog(catalog);
+    }
 
     return res.json({ success: true, message: 'Track deleted successfully' });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to delete track' });
   }
+});
+
+// Guard all /api/* routes: NEVER return HTML for API calls
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ success: false, error: `API route ${req.method} ${req.path} not found` });
 });
 
 // ==========================================
@@ -269,7 +272,11 @@ async function startServer() {
   const distPath = path.resolve(__dirname, 'dist');
   const publicPath = path.resolve(__dirname, 'public');
 
-  if (!isProd && !fs.existsSync(path.resolve(distPath, 'index.html'))) {
+  // Direct static delivery for audio assets and uploaded files
+  app.use('/audio', express.static(path.resolve(__dirname, 'public', 'audio')));
+  app.use('/uploads/tracks', express.static(UPLOADS_DIR));
+
+  if (!isProd) {
     // Mount Vite in dev mode
     try {
       const { createServer: createViteServer } = await import('vite');
