@@ -61,6 +61,7 @@ export interface GlobalSettingsDoc {
   activeSongTitle?: string;
   activeSongArtist?: string;
   activeSongUrl?: string;
+  visitorCount?: number;
   updatedAt?: string;
 }
 

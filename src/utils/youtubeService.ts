@@ -117,71 +117,115 @@ export async function searchYouTubeMusic(queryStr: string): Promise<YouTubeTrack
     ];
   }
 
-  // Attempt public YouTube search API
+  // 1. First Priority: Call local backend endpoint (no CORS, live YouTube scraping + oEmbed)
   try {
-    const searchUrl = `https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(cleanQuery)}&filter=music_songs`;
-    const res = await fetch(searchUrl, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.items) && data.items.length > 0) {
-        const results: YouTubeTrackResult[] = data.items
-          .filter((item: any) => item.type === 'stream' && item.url)
-          .slice(0, 10)
-          .map((item: any) => {
-            const vId = item.url.replace('/watch?v=', '');
-            const durationSec = Number(item.duration) || 180;
-            const m = Math.floor(durationSec / 60);
-            const s = Math.floor(durationSec % 60);
-            return {
-              id: `yt_${vId}`,
-              videoId: vId,
-              title: item.title || 'Untitled Track',
-              artist: item.uploaderName || 'YouTube Artist',
-              thumbnail: item.thumbnail || `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
-              durationStr: `${m}:${s < 10 ? '0' : ''}${s}`,
-              durationSec,
-              url: `youtube://${vId}`,
-            };
-          });
-
-        if (results.length > 0) return results;
+    const apiRes = await fetch(`/api/youtube/search?q=${encodeURIComponent(cleanQuery)}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(7000),
+    });
+    if (apiRes.ok) {
+      const data = await apiRes.json();
+      if (data && data.success && Array.isArray(data.results) && data.results.length > 0) {
+        return data.results;
       }
     }
-  } catch {
-    // API search failed or blocked by CORS
+  } catch (err) {
+    console.warn('Backend YouTube search endpoint failed, trying client fallbacks:', err);
+  }
+
+  // Attempt public YouTube search API (Piped)
+  const pipedInstances = [
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.moomoo.me',
+    'https://pipedapi.privacy.com.de',
+    'https://api.piped.victr.me',
+    'https://pipedapi.drgns.space',
+    'https://pipedapi.us.to'
+  ];
+
+  for (const instance of pipedInstances) {
+    try {
+      // Try with music filter first
+      const searchUrl = `${instance}/search?q=${encodeURIComponent(cleanQuery)}&filter=music_songs`;
+      const res = await fetch(searchUrl, { 
+        cache: 'no-store',
+        signal: AbortSignal.timeout(3000) 
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.items) && data.items.length > 0) {
+          const results = data.items
+            .filter((item: any) => item.type === 'stream' && item.url)
+            .slice(0, 10)
+            .map((item: any) => {
+              const vId = item.url.replace('/watch?v=', '');
+              const durationSec = Number(item.duration) || 180;
+              const m = Math.floor(durationSec / 60);
+              const s = Math.floor(durationSec % 60);
+              return {
+                id: `yt_${vId}`,
+                videoId: vId,
+                title: item.title || 'Untitled Track',
+                artist: item.uploaderName || 'YouTube Artist',
+                thumbnail: item.thumbnail || `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
+                durationStr: `${m}:${s < 10 ? '0' : ''}${s}`,
+                durationSec,
+                url: `youtube://${vId}`,
+              };
+            });
+
+          if (results.length > 0) return results;
+        }
+      }
+    } catch {
+      continue;
+    }
   }
 
   // Secondary search fallback via invidious API
-  try {
-    const invUrl = `https://api.invidious.io/api/v1/search?q=${encodeURIComponent(cleanQuery)}&type=video`;
-    const res = await fetch(invUrl, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        const results: YouTubeTrackResult[] = data
-          .slice(0, 10)
-          .map((item: any) => {
-            const vId = item.videoId;
-            const durationSec = Number(item.lengthSeconds) || 180;
-            const m = Math.floor(durationSec / 60);
-            const s = Math.floor(durationSec % 60);
-            return {
-              id: `yt_${vId}`,
-              videoId: vId,
-              title: item.title || 'Untitled Track',
-              artist: item.author || 'YouTube Artist',
-              thumbnail: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
-              durationStr: `${m}:${s < 10 ? '0' : ''}${s}`,
-              durationSec,
-              url: `youtube://${vId}`,
-            };
-          });
+  const invidiousInstances = [
+    'https://inv.tux.rs',
+    'https://yewtu.be',
+    'https://invidious.io.lol',
+    'https://inv.n8low.com',
+    'https://invidious.snopyta.org'
+  ];
 
-        if (results.length > 0) return results;
+  for (const instance of invidiousInstances) {
+    try {
+      const invUrl = `${instance}/api/v1/search?q=${encodeURIComponent(cleanQuery)}&type=video`;
+      const res = await fetch(invUrl, { 
+        cache: 'no-store',
+        signal: AbortSignal.timeout(3000)
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data
+            .slice(0, 10)
+            .map((item: any) => {
+              const vId = item.videoId;
+              const durationSec = Number(item.lengthSeconds) || 180;
+              const m = Math.floor(durationSec / 60);
+              const s = Math.floor(durationSec % 60);
+              return {
+                id: `yt_${vId}`,
+                videoId: vId,
+                title: item.title || 'Untitled Track',
+                artist: item.author || 'YouTube Artist',
+                thumbnail: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
+                durationStr: `${m}:${s < 10 ? '0' : ''}${s}`,
+                durationSec,
+                url: `youtube://${vId}`,
+              };
+            });
+        }
       }
+    } catch {
+      continue;
     }
-  } catch {
-    // Ignore
   }
 
   // Filter preset fallback list by query keywords
@@ -190,5 +234,5 @@ export async function searchYouTubeMusic(queryStr: string): Promise<YouTubeTrack
     (p) => p.title.toLowerCase().includes(lower) || p.artist.toLowerCase().includes(lower)
   );
 
-  return matchedPresets.length > 0 ? matchedPresets : POPULAR_YT_MUSIC_PRESETS;
+  return matchedPresets;
 }

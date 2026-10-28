@@ -108,6 +108,7 @@ interface AdminModalProps {
   onClearAllComments: () => void;
   commentCount: number;
   onExportComments: () => void;
+  visitorCount: number;
   showToast: (msg: string) => void;
 }
 
@@ -144,6 +145,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   onClearAllComments,
   commentCount,
   onExportComments,
+  visitorCount,
   showToast,
   lowPowerMode,
   onSetLowPowerMode,
@@ -159,6 +161,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewYtContainerRef = useRef<HTMLDivElement | null>(null);
+  const previewYtPlayerRef = useRef<any>(null);
 
   // Draft form states
   const [gameDraft, setGameDraft] = useState(favGame);
@@ -199,8 +203,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     try {
       const res = await searchYouTubeMusic(clean);
       setYtResults(res);
+      if (res.length === 0) {
+        showToast('No results found for your search 🔍');
+      }
     } catch {
-      showToast('YouTube Music search failed');
+      showToast('YouTube Music search failed. Check your connection.');
     } finally {
       setIsSearchingYt(false);
     }
@@ -304,6 +311,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     } else if (!isOpen && lastIsOpen.current) {
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
+      }
+      if (previewYtPlayerRef.current) {
+        try {
+          previewYtPlayerRef.current.pauseVideo();
+        } catch {
+          // Ignore
+        }
       }
       setPreviewTrackId(null);
     }
@@ -661,8 +675,108 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     showToast(`Broadcasted: ${track.title} 🎵`);
   };
 
+  const playYtPreview = (videoId: string, trackId: string) => {
+    sound.playClick();
+
+    // Stop HTML5 audio preview if playing
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+    }
+
+    if (previewTrackId === trackId) {
+      if (previewYtPlayerRef.current) {
+        try {
+          previewYtPlayerRef.current.pauseVideo();
+        } catch {
+          // Ignore
+        }
+      }
+      setPreviewTrackId(null);
+      return;
+    }
+
+    const initOrPlayPreview = () => {
+      if (!previewYtContainerRef.current) return;
+
+      if (previewYtPlayerRef.current && typeof previewYtPlayerRef.current.loadVideoById === 'function') {
+        try {
+          previewYtPlayerRef.current.loadVideoById(videoId);
+          previewYtPlayerRef.current.playVideo();
+          setPreviewTrackId(trackId);
+          return;
+        } catch {
+          // Ignore, re-init
+        }
+      }
+
+      previewYtContainerRef.current.innerHTML = '<div id="yt-preview-target"></div>';
+      try {
+        previewYtPlayerRef.current = new (window as any).YT.Player('yt-preview-target', {
+          videoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            playsinline: 1,
+            origin: window.location.origin,
+          },
+          events: {
+            onReady: (event: any) => {
+              event.target.playVideo();
+              setPreviewTrackId(trackId);
+            },
+            onStateChange: (event: any) => {
+              if (event.data === 0) { // ENDED
+                setPreviewTrackId(null);
+              }
+            },
+            onError: () => {
+              showToast('YouTube preview unavailable for this track');
+              setPreviewTrackId(null);
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to init YT preview:', err);
+        showToast('YouTube preview error');
+        setPreviewTrackId(null);
+      }
+    };
+
+    if (typeof (window as any).YT === 'undefined' || !(window as any).YT.Player) {
+      const existingScript = document.getElementById('youtube-iframe-api-script');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.id = 'youtube-iframe-api-script';
+        script.src = 'https://www.youtube.com/iframe_api';
+        document.body.appendChild(script);
+      }
+      (window as any).onYouTubeIframeAPIReady = () => {
+        initOrPlayPreview();
+      };
+      setTimeout(initOrPlayPreview, 600);
+    } else {
+      initOrPlayPreview();
+    }
+  };
+
   const handlePreviewTrack = async (track: AudioTrack) => {
     sound.playClick();
+
+    const ytVideoId = extractYouTubeVideoId(track.audioUrl);
+    if (ytVideoId) {
+      playYtPreview(ytVideoId, track.id);
+      return;
+    }
+
+    // Stop YouTube preview if playing
+    if (previewYtPlayerRef.current) {
+      try {
+        previewYtPlayerRef.current.pauseVideo();
+      } catch {
+        // Ignore
+      }
+    }
+
     const audio = previewAudioRef.current;
     if (!audio) return;
 
@@ -676,13 +790,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           const resolved = await getStoredAudioUrl(finalUrl.replace('firestore://', ''));
           if (resolved) finalUrl = resolved;
         }
-        
+
         const isValid = await validateAudioUrl(finalUrl);
         if (!isValid) {
           showToast('Track incompatible or unreachable');
           return;
         }
-        
+
         audio.src = finalUrl;
         audio.currentTime = 0;
         await audio.play();
@@ -1012,11 +1126,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       }}
                       className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                         musicSubTab === 'ytmusic'
-                          ? 'bg-red-600 text-white font-medium shadow-sm'
+                          ? 'bg-purple-600 text-white font-medium shadow-sm'
                           : 'text-zinc-400 hover:text-white'
                       }`}
                     >
-                      <Youtube className="w-3.5 h-3.5 text-white" />
+                      <Radio className="w-3.5 h-3.5 text-white" />
                       <span>YouTube Music</span>
                     </button>
                     <button
@@ -1040,7 +1154,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
-                          <Youtube className="w-4 h-4 text-red-400" />
+                          <Radio className="w-4 h-4 text-purple-400" />
                           <span>Search YouTube Music</span>
                         </div>
                         <span className="text-[10px] font-mono text-zinc-400">
@@ -1055,14 +1169,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             placeholder="Search song, artist or paste YouTube URL..."
                             value={ytQuery}
                             onChange={(e) => setYtQuery(e.target.value)}
-                            className="w-full pl-8 pr-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                            className="w-full pl-8 pr-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
                           />
                           <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
                         <button
                           type="submit"
                           disabled={isSearchingYt}
-                          className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0"
+                          className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
                         >
                           {isSearchingYt ? (
                             <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1091,7 +1205,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                                 key={item.id}
                                 className={`flex items-center justify-between p-2 rounded-xl border text-xs transition-colors ${
                                   isSelected
-                                    ? 'bg-red-950/40 border-red-500/60 text-white'
+                                    ? 'bg-purple-950/40 border-purple-500/60 text-white'
                                     : 'bg-white/5 border-white/5 text-zinc-300 hover:bg-white/10'
                                 }`}
                               >
@@ -1116,19 +1230,35 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                                   </div>
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleBroadcastYtTrack(item)}
-                                  className={`px-2.5 py-1.5 rounded-lg font-mono text-[10px] font-semibold flex items-center gap-1 shrink-0 transition-colors cursor-pointer ${
-                                    isSelected
-                                      ? 'bg-emerald-600 text-white'
-                                      : 'bg-red-600 hover:bg-red-500 text-white'
-                                  }`}
-                                  title="Broadcast this YouTube song live"
-                                >
-                                  <Radio className="w-3 h-3" />
-                                  <span>{isSelected ? 'Playing' : 'Play Live'}</span>
-                                </button>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => playYtPreview(item.videoId, item.id)}
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
+                                      previewTrackId === item.id
+                                        ? 'bg-purple-500 text-white'
+                                        : 'bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white'
+                                    }`}
+                                    title={previewTrackId === item.id ? 'Stop Preview' : 'Listen Preview'}
+                                    aria-label={previewTrackId === item.id ? 'Stop Preview' : 'Listen Preview'}
+                                  >
+                                    {previewTrackId === item.id ? <Pause className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleBroadcastYtTrack(item)}
+                                    className={`px-2.5 py-1.5 rounded-lg font-mono text-[10px] font-semibold flex items-center gap-1 shrink-0 transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-purple-600 hover:bg-purple-500 text-white'
+                                    }`}
+                                    title="Broadcast this YouTube song live"
+                                  >
+                                    <Radio className="w-3 h-3" />
+                                    <span>{isSelected ? 'Playing' : 'Play Live'}</span>
+                                  </button>
+                                </div>
                               </div>
                             );
                           })
@@ -1250,8 +1380,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </form>
                   )}
 
-                  {/* Hidden preview audio element for testing tracks before broadcast */}
+                  {/* Hidden preview audio & YouTube elements for testing tracks before broadcast */}
                   <audio ref={previewAudioRef} onEnded={() => setPreviewTrackId(null)} className="hidden" />
+                  <div ref={previewYtContainerRef} className="hidden w-0 h-0 overflow-hidden pointer-events-none absolute" />
 
                   {/* Saved Tracks Catalog */}
                   <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5">
@@ -1599,9 +1730,29 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 7: System Settings */}
+              {/* TAB 7: System Settings & Meta */}
               {activeTab === 'system' && (
                 <div className="space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                        <Gauge className="w-4 h-4 text-purple-400" />
+                        <span>Real-time App Stats</span>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-black/40 border border-white/10 text-center">
+                        <div className="text-[10px] font-mono text-zinc-500 uppercase mb-1">Total Visitors</div>
+                        <div className="text-xl font-bold text-white tracking-tight">{visitorCount.toLocaleString()}</div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-black/40 border border-white/10 text-center">
+                        <div className="text-[10px] font-mono text-zinc-500 uppercase mb-1">Total Comments</div>
+                        <div className="text-xl font-bold text-white tracking-tight">{commentCount.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
@@ -1642,6 +1793,18 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     <p className="text-[11px] text-zinc-400">
                       Global toggle to enable or disable the comments section.
                     </p>
+                  </div>
+                  
+                  <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+                      <Terminal className="w-4 h-4 text-zinc-500" />
+                      <span>System Identity</span>
+                    </div>
+                    <div className="text-[10px] font-mono space-y-1 text-zinc-500">
+                      <p>Core Version: 2.4.5-stable</p>
+                      <p>DB Engine: Firestore Native</p>
+                      <p>Cloud Region: europe-west2</p>
+                    </div>
                   </div>
                 </div>
               )}

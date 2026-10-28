@@ -79,6 +79,11 @@ service cloud.firestore {
     }
 
     // Global settings (socials view style, game, song, banner, profile customization)
+    match /settings/stats {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasAll(['totalVisitors', 'lastVisitorAt']);
+    }
+
     match /settings/{settingId} {
       allow read: if true;
       allow create: if isValidId(settingId) && isValidGlobalSettings(request.resource.data);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus, Youtube } from 'lucide-react';
+import { Play, Pause, Volume2, Volume1, VolumeX, Disc3, Plus, Radio } from 'lucide-react';
 import { ThemeConfig } from '../types';
 import { sound } from '../utils/audio';
 import { getStoredAudioUrl, validateAudioUrl } from '../utils/audioStorage';
@@ -544,9 +544,9 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   return (
     <div
       style={{
-        bottom: 'max(0.65rem, env(safe-area-inset-bottom, 10px))',
+        bottom: 'max(1rem, env(safe-area-inset-bottom, 16px))',
       }}
-      className="fixed left-1/2 -translate-x-1/2 z-40 px-2.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/92 border border-white/15 backdrop-blur-2xl shadow-2xl flex items-center gap-2 sm:gap-2.5 text-xs w-[calc(100vw-1.25rem)] sm:w-[calc(100vw-2rem)] max-w-lg touch-manipulation select-none"
+      className="fixed left-1/2 -translate-x-1/2 z-40 px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-950/92 border border-white/15 backdrop-blur-2xl shadow-2xl flex items-center gap-2 sm:gap-2.5 text-xs w-[calc(100vw-1.5rem)] sm:w-[calc(100vw-2rem)] max-w-lg touch-manipulation select-none"
     >
       {/* Hidden audio & YouTube player elements */}
       <audio
@@ -565,7 +565,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
         className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center justify-center shrink-0 text-purple-300 shadow-sm relative"
       >
-        {ytVideoId ? <Youtube className="w-4 h-4 text-red-400" /> : <Disc3 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />}
+        <Disc3 className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-purple-300" />
       </motion.div>
 
       {/* Track Details & Scrubber */}
@@ -680,7 +680,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full right-[-10px] sm:right-0 mb-3 px-3 py-2.5 rounded-2xl bg-zinc-950/95 border border-purple-500/30 backdrop-blur-2xl shadow-2xl flex items-center gap-2.5 z-50 text-xs min-w-[170px]"
+              className="absolute bottom-full right-0 mb-3 px-3 py-2.5 rounded-2xl bg-zinc-950/95 border border-purple-500/30 backdrop-blur-2xl shadow-2xl flex items-center gap-2.5 z-50 text-xs min-w-[170px]"
             >
               <button
                 onClick={toggleMute}

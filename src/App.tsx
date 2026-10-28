@@ -9,7 +9,7 @@ import { SocialLinks } from './components/SocialLinks';
 import { Comments } from './components/Comments';
 import { AudioPlayerBar } from './components/AudioPlayerBar';
 import { AdminModal, AdminTab } from './components/AdminModal';
-import { Toast } from './components/Toast';
+
 import { LoadingScreen } from './components/LoadingScreen';
 import { ThemeConfig, SocialsViewMode, GlobalSettingsDoc } from './types';
 import { sound } from './utils/audio';
@@ -86,6 +86,10 @@ export default function App() {
   const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
   const [commentsEnabled, setCommentsEnabled] = useState<boolean>(true);
 
+  // Visitor tracking & stats
+  const [visitorCount, setVisitorCount] = useState<number>(0);
+  const [commentCount, setCommentCount] = useState<number>(0);
+
   // Secret 10-Click Admin Trigger on star icon
   const [starClicks, setStarClicks] = useState(0);
   const starTimerRef = useRef<number | null>(null);
@@ -113,6 +117,7 @@ export default function App() {
           if (data.activeSongTitle !== undefined) setActiveSongTitle(data.activeSongTitle);
           if (data.activeSongArtist !== undefined) setActiveSongArtist(data.activeSongArtist);
           if (data.activeSongUrl !== undefined) setActiveSongUrl(data.activeSongUrl);
+          if (data.visitorCount !== undefined) setVisitorCount(data.visitorCount);
         } else {
           // Initialize default document in Firestore if not present yet
           setDoc(
@@ -133,6 +138,7 @@ export default function App() {
               activeSongTitle: '',
               activeSongArtist: '',
               activeSongUrl: '',
+              visitorCount: 1,
               updatedAt: new Date().toISOString(),
             },
             { merge: true }
@@ -147,6 +153,47 @@ export default function App() {
     );
 
     return () => unsubscribe();
+  }, []);
+
+  // Increment visitor counter on session start (once per browser session)
+  useEffect(() => {
+    if (!isReady) return;
+    
+    const sessionKey = 'cursed_session_tracked';
+    if (sessionStorage.getItem(sessionKey)) return;
+
+    const incrementVisitor = async () => {
+      try {
+        const settingsRef = doc(db, 'settings', 'global');
+        // We use a transaction-less increment for simplicity here
+        // In a high-traffic app, we'd use FieldValue.increment
+        // But for this project, a simple set with merge is fine if we fetch first
+        // Or better yet, just use a separate 'stats' doc
+        const statsRef = doc(db, 'settings', 'stats');
+        await setDoc(statsRef, {
+          totalVisitors: (visitorCount || 0) + 1,
+          lastVisitorAt: new Date().toISOString()
+        }, { merge: true });
+        
+        sessionStorage.setItem(sessionKey, 'true');
+      } catch (err) {
+        console.warn('Stats sync error:', err);
+      }
+    };
+
+    incrementVisitor();
+  }, [isReady]);
+
+  // Track stats from its own doc
+  useEffect(() => {
+    const statsRef = doc(db, 'settings', 'stats');
+    const unsub = onSnapshot(statsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.totalVisitors !== undefined) setVisitorCount(data.totalVisitors);
+      }
+    });
+    return () => unsub();
   }, []);
 
   // Listen for Google Authentication state & redirect results
@@ -180,8 +227,18 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const effectiveLowPowerMode = lowPowerMode && isMobile;
+
   let motionScale = motionPreset === 'calm' ? 0.4 : motionPreset === 'hyper' ? 1.6 : 1.0;
-  if (lowPowerMode) motionScale *= 0.5; // Throttle motion in low power mode
+  if (effectiveLowPowerMode) motionScale *= 0.5; // Throttle motion in low power mode
 
   const handleStarClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -325,7 +382,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Toast Notification */}
-      <Toast message={toastMessage} />
+      {/* Toast removed per user request */}
 
       {/* Maintenance Overlay */}
       {maintenanceMode && !isAdmin && (
@@ -339,7 +396,7 @@ export default function App() {
       )}
 
       {/* Interactive Background Kinetic Canvas */}
-      <BackgroundCanvas theme={theme} motionScale={motionScale} lowPowerMode={lowPowerMode} />
+      <BackgroundCanvas theme={theme} motionScale={motionScale} lowPowerMode={effectiveLowPowerMode} />
 
       {/* Admin Live Announcement Banner */}
       {announcementActive && announcement.trim() && (
@@ -452,7 +509,7 @@ export default function App() {
           nickname={nickname}
           bioEmoticon={bioEmoticon}
           avatarUrl={avatarUrl}
-          lowPowerMode={lowPowerMode}
+          lowPowerMode={effectiveLowPowerMode}
         />
 
         {/* Dynamic Tab Body */}
@@ -489,6 +546,7 @@ export default function App() {
                   isAdmin={isAdmin}
                   onOpenAdmin={() => setIsAdminModalOpen(true)}
                   showToast={showToast}
+                  onUpdateCount={setCommentCount}
                 />
               </motion.div>
             )}
@@ -554,7 +612,8 @@ export default function App() {
         activeSongUrl={activeSongUrl}
         onSetActiveSong={handleSetActiveSong}
         onClearAllComments={handleClearAllComments}
-        commentCount={0}
+        commentCount={commentCount}
+        visitorCount={visitorCount}
         onExportComments={handleExportComments}
         showToast={showToast}
         lowPowerMode={lowPowerMode}

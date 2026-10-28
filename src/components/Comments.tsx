@@ -11,9 +11,10 @@ interface CommentsProps {
   isAdmin: boolean;
   onOpenAdmin: () => void;
   showToast: (msg: string) => void;
+  onUpdateCount?: (count: number) => void;
 }
 
-export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showToast }) => {
+export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showToast, onUpdateCount }) => {
   const [entries, setEntries] = useState<CommentEntry[]>(() => {
     try {
       const saved = localStorage.getItem('cursed_saved_comments');
@@ -111,6 +112,7 @@ export const Comments: React.FC<CommentsProps> = ({ isAdmin, onOpenAdmin, showTo
         });
 
         setEntries(list);
+        if (onUpdateCount) onUpdateCount(list.length);
         setIsLoading(false);
         try {
           localStorage.setItem('cursed_saved_comments', JSON.stringify(list));

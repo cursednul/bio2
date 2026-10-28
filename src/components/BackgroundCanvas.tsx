@@ -17,20 +17,9 @@ interface Particle {
   baseAlpha: number;
 }
 
-interface Ripple {
-  x: number;
-  y: number;
-  radius: number;
-  maxRadius: number;
-  alpha: number;
-  color: string;
-  active: boolean;
-}
-
 export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motionScale, lowPowerMode = false }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mouseRef = useRef({ x: 0, y: 0, targetX: 0, targetY: 0, active: false });
-  const ripplesRef = useRef<Ripple[]>([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,12 +28,6 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
     if (!ctx) return;
 
     let animationFrameId: number;
-    // Initialize ripple pool
-    if (ripplesRef.current.length === 0) {
-      for (let i = 0; i < 10; i++) {
-        ripplesRef.current.push({ x: 0, y: 0, radius: 0, maxRadius: 0, alpha: 0, color: '', active: false });
-      }
-    }
 
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);
@@ -63,22 +46,7 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
       mouseRef.current.active = true;
     };
 
-    const handlePointerDown = (e: PointerEvent) => {
-      if (motionScale === 0) return;
-      const ripple = ripplesRef.current.find((r) => !r.active);
-      if (ripple) {
-        ripple.active = true;
-        ripple.x = e.clientX;
-        ripple.y = e.clientY;
-        ripple.radius = 4;
-        ripple.maxRadius = Math.min(width, height) * (lowPowerMode ? 0.25 : 0.45);
-        ripple.alpha = 0.7;
-        ripple.color = theme.primaryLight;
-      }
-    };
-
     window.addEventListener('pointermove', handlePointerMove, { passive: true });
-    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
 
     // Performance adaptation for Android / Mobile devices
     const isMobile = width < 768;
@@ -214,25 +182,6 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
         ctx.fill();
       });
 
-      // 5. Click Ripples (Pooled)
-      for (let r = 0; r < ripplesRef.current.length; r++) {
-        const rip = ripplesRef.current[r];
-        if (!rip.active) continue;
-        rip.radius += (rip.maxRadius - rip.radius) * 0.045 + 0.8;
-        rip.alpha *= 0.94;
-
-        ctx.strokeStyle = rip.color;
-        ctx.lineWidth = 1.3;
-        ctx.globalAlpha = rip.alpha;
-        ctx.beginPath();
-        ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
-        ctx.stroke();
-
-        if (rip.alpha < 0.02 || rip.radius >= rip.maxRadius) {
-          rip.active = false;
-        }
-      }
-
       ctx.globalAlpha = 1;
       animationFrameId = requestAnimationFrame(render);
     };
@@ -243,7 +192,6 @@ export const BackgroundCanvas: React.FC<BackgroundCanvasProps> = ({ theme, motio
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [theme, motionScale, lowPowerMode]);
 

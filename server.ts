@@ -258,6 +258,135 @@ app.delete('/api/tracks/:id', (req, res) => {
   }
 });
 
+// 5. YouTube Music Search API (Direct Server Scraping + oEmbed)
+app.get('/api/youtube/search', async (req, res) => {
+  try {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!query) {
+      return res.json({ success: true, results: [] });
+    }
+
+    // Check if query is a direct video ID or YouTube URL
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = query.match(regExp);
+    let directId = match && match[2] && match[2].length === 11 ? match[2] : null;
+    if (!directId && /^[a-zA-Z0-9_\-]{11}$/.test(query)) {
+      directId = query;
+    }
+    if (!directId && query.startsWith('youtube://')) {
+      directId = query.replace('youtube://', '').slice(0, 11);
+    }
+
+    if (directId) {
+      try {
+        const oembedRes = await fetch(
+          `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${directId}&format=json`,
+          { signal: AbortSignal.timeout(4000) }
+        );
+        if (oembedRes.ok) {
+          const oembed = (await oembedRes.json()) as any;
+          return res.json({
+            success: true,
+            results: [
+              {
+                id: `yt_${directId}`,
+                videoId: directId,
+                title: oembed.title || 'YouTube Track',
+                artist: oembed.author_name || 'YouTube Artist',
+                thumbnail: `https://img.youtube.com/vi/${directId}/hqdefault.jpg`,
+                durationStr: '3:30',
+                durationSec: 210,
+                url: `youtube://${directId}`,
+              },
+            ],
+          });
+        }
+      } catch (err) {
+        console.warn('oEmbed fetch error for direct ID:', err);
+      }
+
+      return res.json({
+        success: true,
+        results: [
+          {
+            id: `yt_${directId}`,
+            videoId: directId,
+            title: 'YouTube Track',
+            artist: 'YouTube Artist',
+            thumbnail: `https://img.youtube.com/vi/${directId}/hqdefault.jpg`,
+            durationStr: '3:30',
+            durationSec: 210,
+            url: `youtube://${directId}`,
+          },
+        ],
+      });
+    }
+
+    // Server-side YouTube HTML Search parsing
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+    const ytRes = await fetch(searchUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (ytRes.ok) {
+      const html = await ytRes.text();
+      const matchData = html.match(/ytInitialData\s*=\s*({.+?});<\/script>/);
+      if (matchData) {
+        const data = JSON.parse(matchData[1]);
+        const sections =
+          data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+        const videoSection = sections?.find((s: any) => s.itemSectionRenderer)?.itemSectionRenderer?.contents;
+
+        if (Array.isArray(videoSection)) {
+          const results = videoSection
+            .filter((v: any) => v.videoRenderer && v.videoRenderer.videoId)
+            .slice(0, 15)
+            .map((v: any) => {
+              const vr = v.videoRenderer;
+              const videoId = vr.videoId;
+              const title = vr.title?.runs?.[0]?.text || 'Untitled Song';
+              const artist =
+                vr.ownerText?.runs?.[0]?.text || vr.shortBylineText?.runs?.[0]?.text || 'YouTube Music';
+              const durationStr = vr.lengthText?.simpleText || '3:30';
+              let durationSec = 210;
+              if (durationStr) {
+                const parts = durationStr.split(':').map(Number);
+                if (parts.length === 2) durationSec = parts[0] * 60 + parts[1];
+                else if (parts.length === 3) durationSec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+              }
+              const thumb = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+
+              return {
+                id: `yt_${videoId}`,
+                videoId,
+                title,
+                artist,
+                thumbnail: thumb,
+                durationStr,
+                durationSec,
+                url: `youtube://${videoId}`,
+              };
+            });
+
+          if (results.length > 0) {
+            return res.json({ success: true, results });
+          }
+        }
+      }
+    }
+
+    return res.json({ success: true, results: [] });
+  } catch (err: any) {
+    console.error('Server YouTube search error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Search failed', results: [] });
+  }
+});
+
 // Guard all /api/* routes: NEVER return HTML for API calls
 app.all('/api/*', (req, res) => {
   res.status(404).json({ success: false, error: `API route ${req.method} ${req.path} not found` });

@@ -194,13 +194,11 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
                   whileHover={lowPowerMode ? {} : {
                     y: -5,
                     scale: 1.25,
-                    color: theme.primaryLight,
                     transition: { type: 'spring', stiffness: 500, damping: 12 },
                   }}
                   whileTap={{
                     y: -4,
                     scale: 1.2,
-                    color: theme.primaryLight,
                   }}
                   className="inline-block transition-colors px-0.5"
                   style={{
